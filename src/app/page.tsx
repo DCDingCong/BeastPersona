@@ -311,9 +311,9 @@ export default function Home() {
             <section className="screen">
               <div className="topbar">
                 <Sparkles size={22} color="var(--cyan)" />
-                <span className="hint">兽格推算所</span>
+                <span className="hint">兽格造像馆</span>
               </div>
-              <h1 className="brand-title">兽格<br />推算所</h1>
+              <h1 className="brand-title">兽格<br />造像馆</h1>
               <p className="brand-subtitle">
                 输入你的性格、审美和幻想偏好，生成完整形象图、多维度设定图和设定说明。
               </p>

@@ -31,5 +31,5 @@ export function getTextModel() {
 }
 
 export function getImageModel() {
-  return process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
+  return process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
 }

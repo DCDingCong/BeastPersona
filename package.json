@@ -1,6 +1,8 @@
 {
-  "name": "ai-fursona-mobile",
-  "version": "0.1.0",
+  "name": "fursona-atelier",
+  "version": "1.0.0",
+  "author": "DingC",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",

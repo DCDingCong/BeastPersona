@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "兽格推算所",
+  title: "兽格造像馆",
   description: "推演并生成你的专属兽设。",
 };
 

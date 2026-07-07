@@ -1,12 +1,63 @@
-# AI 兽设推算手机端
+# 兽格造像馆
 
-这是一个 Next.js + React + TypeScript 实现的 AI 兽设推算手机端工具。用户可以通过固定快速问卷或深度分支题库完成设定推演，并一次性输出：
+**Type:** [中文](./README.md) | [English](./README.en.md)
 
-- 角色完整形象图
-- 角色多维度设定图
-- 设定说明
+**Version:** V1.0.0<br>
+**Author:** DingC<br>
+**License:** [MIT](./LICENSE)
 
-当前链路接入 OpenAI SDK，支持真实文本推演和图片生成。没有配置 API key 时，页面可以预览流程和本地 fallback 设定，但不能视为完成真实 AI 生成。
+![兽格造像馆界面预览](./public/ai-fursona-mobile-style-v1.png)
+
+兽格造像馆是一个移动端优先的 AI 兽设造像工具。用户通过隐晦问卷或深度分支题库输入性格、审美、世界观与边界偏好，系统先用本地规则引擎推演候选物种、血统和冲突，再调用 OpenAI 生成结构化角色设定、完整形象图和多维度设定图。
+
+## 预览
+
+| 完整形象图 | 多维度设定图 |
+| --- | --- |
+| ![完整形象图示例](./public/sample-complete-scene.png) | ![多维度设定图示例](./public/sample-reference-sheet.png) |
+
+## 核心亮点
+
+- **双模式问卷**：固定 12 题快速推算，或使用深度分支题库进行更细的角色定制。
+- **隐晦评分**：用户看到的是场景选择，后台累积人格、审美、世界观、材质、血统和物种候选分。
+- **血统切换**：保留 `AI 推荐`、`纯血`、`混血` 三种生成类型，可按用户偏好覆盖系统建议。
+- **本地规则引擎**：先生成 `scoreSnapshot`、候选物种、血统建议和冲突提示，再进入 AI 生成。
+- **双图输出**：同一份结构化设定派生完整场景图和参考设定图，减少角色不一致。
+- **结果操作**：支持保存图片、复制设定说明、单张图片重试。
+
+> 当前 V1.0.0 版本以快速推算流程为主要发行范围；精细模式题库暂未完整测试，将在 V2.0 继续迭代。
+
+## 生成规则
+
+### 问卷与评分
+
+- 快速问卷保持 12 道选择题，选项不直接暴露结果标签。
+- 单个答案只提供弱权重，通常影响 3-5 个标签，避免一题决定最终物种。
+- 深度问卷根据已答标签动态抽取分支题，包括基础判断、血统细化、哺乳类、神话鳞片、特殊材质、视觉、世界观和约束。
+
+### 组合触发
+
+明显结果必须由多标签组合触发，例如：
+
+| 条件 | 加成 |
+| --- | --- |
+| `mystery >= 3` + `slim >= 2` + `fox >= 2` | 狐系候选提高 |
+| `loyal >= 3` + `wild >= 2` + `dark >= 2` | 狼系候选提高 |
+| `control >= 3` + `mythic_bias >= 2` + `scale >= 2` | 龙 / 麒麟候选提高 |
+| `cyber >= 3` + `mechanical_bias >= 2` | 机械义体与混血倾向提高 |
+
+### 血统规则
+
+- `AI 推荐`：根据 `hybrid_score`、`pure_score`、主物种领先比例和视觉冲突自动选择。
+- `纯血`：只保留一个主物种，物种比例为 100%，禁止角、翅膀、鳞片、机械异化等明显副血统特征。
+- `混血`：最多 3 个血统，主血统不低于 55%，副血统必须落在具体身体部位、材质或装备上。
+- 不确定时默认生成“主血统清晰的轻混血”，避免随机拼接。
+
+### 图片与文案约束
+
+- 角色设定、完整形象图 prompt、参考设定图 prompt 都来自同一份 `character_spec_json`。
+- 图片 prompt 强制加入 `no visible text, no character name, no labels, no typography, no watermark`。
+- 结果页只展示用户友好的设定，不暴露逐题分数和内部推断细节。
 
 ## 技术栈
 
@@ -18,17 +69,7 @@
 - Vitest
 - ESLint
 
-## 当前功能
-
-- 快速生成：固定 12 道隐晦问卷
-- 深度定制：从本地题库按分支抽题
-- 血统模式：AI 推荐、纯血、混血
-- 本地评分：弱权重、组合触发、物种候选、血统建议
-- 生成前确认：展示候选物种、血统建议、主要标签和冲突提示
-- AI 生成：结构化设定、完整形象图、多维度设定图
-- 结果页：保存图片、复制说明、单图重试
-
-## 目录说明
+## 项目结构
 
 ```text
 src/app/page.tsx                         移动端主界面与交互流程
@@ -43,14 +84,12 @@ src/lib/questionFlow.ts                  深度分支抽题
 src/lib/conflicts.ts                     设定冲突检测
 src/lib/fursona.ts                       兽设规则推演与 fallback 设定
 src/lib/openai.ts                        OpenAI SDK 配置读取
-public/                                  前端静态示例图片
+public/                                  GitHub 与前端可用的静态示例图
 assets/                                  产品视觉参考图
 docs/                                   PRD、题库和实现计划文档
-.env.local.example                       本地环境变量模板，可提交
-.env.local                               本地真实配置，不要提交
 ```
 
-## 本地配置
+## 本地运行
 
 复制环境变量模板：
 
@@ -58,45 +97,22 @@ docs/                                   PRD、题库和实现计划文档
 Copy-Item .env.local.example .env.local
 ```
 
-然后编辑 `.env.local`：
+编辑 `.env.local`：
 
 ```env
-OPENAI_API_KEY=你的 OpenAI API Key
+OPENAI_API_KEY=sk-your-api-key-here
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_TEXT_MODEL=gpt-4.1-mini
-OPENAI_IMAGE_MODEL=gpt-image-1
+OPENAI_IMAGE_MODEL=gpt-image-2
 ```
 
-说明：
+`.env.local.example` 只提供可提交到 GitHub 的示例值。真实的 `.env.local` 已被 `.gitignore` 忽略，不要提交你的真实 key、自定义 base URL 或任何 secret。
 
-- `OPENAI_API_KEY`：真实 API key，只放本地。
-- `OPENAI_BASE_URL`：大模型请求地址。使用官方 OpenAI 时保持 `https://api.openai.com/v1`；如果使用代理、中转或兼容 OpenAI 的服务，改这里。
-- `OPENAI_TEXT_MODEL`：结构化设定生成模型。
-- `OPENAI_IMAGE_MODEL`：图片生成模型。
-
-`.env.local` 已被 `.gitignore` 忽略，不会进入未来 Git 提交。只提交 `.env.local.example`。
-
-## 启动开发环境
-
-Windows PowerShell 下建议使用 `npm.cmd`，避免系统执行策略拦截 `npm.ps1`。
-
-安装依赖：
+安装依赖并启动：
 
 ```powershell
 npm.cmd install
-```
-
-启动开发服务器：
-
-```powershell
 npm.cmd run dev
-```
-
-如果只是验收功能、避免开发热更新 WebSocket 干扰，建议先构建再启动稳定预览：
-
-```powershell
-npm.cmd run build
-npm.cmd run preview
 ```
 
 打开：
@@ -105,44 +121,25 @@ npm.cmd run preview
 http://localhost:3000
 ```
 
-## 常用命令
-
-运行测试：
-
-```powershell
-npm.cmd test
-```
-
-运行 ESLint：
-
-```powershell
-npm.cmd run lint
-```
-
-生产构建：
+如果只是验收功能，建议使用稳定预览：
 
 ```powershell
 npm.cmd run build
+npm.cmd run preview
 ```
 
-启动生产构建结果：
+## 常用命令
 
-```powershell
-npm.cmd run start
-```
+| 命令 | 说明 |
+| --- | --- |
+| `npm.cmd run dev` | 启动开发服务器 |
+| `npm.cmd run build` | 生产构建 |
+| `npm.cmd run preview` | 在 `127.0.0.1:3000` 启动生产预览 |
+| `npm.cmd run start` | 启动已构建的生产应用 |
+| `npm.cmd test` | 运行 Vitest |
+| `npm.cmd run lint` | 运行 ESLint |
 
-`npm.cmd run start` 需要先执行过 `npm.cmd run build`。
-`npm.cmd run preview` 等价于在 `127.0.0.1:3000` 启动生产预览，更适合本地验收。
-
-## AI 生成流程
-
-前端请求：
-
-```text
-POST /api/generate
-```
-
-流程如下：
+## API 流程
 
 ```text
 固定 Q12 或深度分支题库
@@ -159,21 +156,21 @@ OpenAI 文本模型生成 character_spec_json
 ↓
 OpenAI 图片模型并行生成完整形象图和多维度设定图
 ↓
-返回结果页需要的三类产物
+返回结果页需要的角色设定、完整图、参考图
 ```
 
-单图重试请求：
+### `POST /api/generate`
 
-```text
-POST /api/regenerate-image
-```
+生成结构化角色设定、完整形象图和多维度设定图。缺少 `OPENAI_API_KEY` 时会返回明确错误。
 
-该接口只接收已有 prompt 并重画单张图片，不重新生成角色设定。
+### `POST /api/regenerate-image`
+
+接收已有 prompt 并重画单张图片，不重新生成角色设定。
 
 ## 暂不包含
 
 - 结果持久化 / 历史记录
-- 社区
+- 社区与作品流
 - 多角色关系网
 - 生成后细粒度微调
 - 局部重绘
@@ -182,7 +179,9 @@ POST /api/regenerate-image
 
 ## 注意事项
 
-- 不要把 `.env.local`、API key 或任何 secret 提交到云端。
-- 如果替换为兼容 OpenAI 的服务，需要确认该服务同时兼容 Responses API 和 Images API；否则需要改 API 路由的调用方式。
-- 图片生成成本和耗时取决于所选模型与服务商。
+- 不要提交 `.env.local`、API key 或任何 secret。
+- 如果替换为兼容 OpenAI 的服务，需要确认该服务同时兼容 Responses API 和 Images API。
+- 图片生成成本、耗时和最终质量取决于所选模型与服务商，推荐使用 `gpt-image-2`。
+- 图片生成质量偏差、细节不稳定或风格不一致通常属于图片模型能力边界，不代表本地规则推演一定出错。
+- 精细模式题库暂未完整测试，将在 V2.0 进行迭代。
 - 当前 UI 是移动端优先，桌面端主要作为居中手机预览。
