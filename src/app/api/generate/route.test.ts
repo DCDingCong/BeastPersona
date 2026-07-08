@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { characterSpecSchema, POST } from "./route";
+import { POST } from "./route";
+import { characterSpecSchema } from "./schema";
 
 function findDynamicObjectSchemas(schema: unknown, path = "$"): string[] {
   if (!schema || typeof schema !== "object") return [];
@@ -81,5 +82,14 @@ describe("generate route", () => {
     expect(routeSource).toContain("no visible text");
     expect(routeSource).toContain("no character name");
     expect(routeSource).toContain("no labels");
+  });
+
+  it("guides reference sheets toward structured character boards", () => {
+    const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
+
+    expect(routeSource).toContain("竖版 A4 角色设定板");
+    expect(routeSource).toContain("3x3 表情格");
+    expect(routeSource).toContain("vertical A4 portrait character reference sheet");
+    expect(routeSource).toContain("short headings only");
   });
 });

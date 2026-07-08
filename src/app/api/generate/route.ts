@@ -5,102 +5,10 @@ import {
   type GenerateRequest,
 } from "@/lib/fursona";
 import { getImageModel, getOpenAIClient, getTextModel, hasOpenAIKey } from "@/lib/openai";
+import { characterSpecSchema } from "./schema";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-export const characterSpecSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "name",
-    "lineage_mode",
-    "primary_species",
-    "secondary_species",
-    "species_ratio",
-    "positioning",
-    "personality_keywords",
-    "visual_keywords",
-    "colors",
-    "body",
-    "height",
-    "features",
-    "outfit",
-    "signature_item",
-    "background_story",
-    "mission",
-    "catchphrase",
-    "must_keep",
-    "avoid",
-    "prompts",
-    "setting_description",
-  ],
-  properties: {
-    name: { type: "string" },
-    lineage_mode: { enum: ["pure", "hybrid"] },
-    primary_species: { type: "string" },
-    secondary_species: { type: "array", items: { type: "string" } },
-    species_ratio: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["species", "ratio"],
-        properties: {
-          species: { type: "string" },
-          ratio: { type: "number" },
-        },
-      },
-    },
-    positioning: { type: "string" },
-    personality_keywords: { type: "array", items: { type: "string" } },
-    visual_keywords: { type: "array", items: { type: "string" } },
-    colors: {
-      type: "object",
-      additionalProperties: false,
-      required: ["primary", "secondary", "accent", "neutral", "shadow"],
-      properties: {
-        primary: { type: "string" },
-        secondary: { type: "string" },
-        accent: { type: "string" },
-        neutral: { type: "string" },
-        shadow: { type: "string" },
-      },
-    },
-    body: { type: "string" },
-    height: { type: "string" },
-    features: {
-      type: "object",
-      additionalProperties: false,
-      required: ["ears", "tail", "eyes", "fur", "special_marks"],
-      properties: {
-        ears: { type: "string" },
-        tail: { type: "string" },
-        eyes: { type: "string" },
-        fur: { type: "string" },
-        special_marks: { type: "string" },
-      },
-    },
-    outfit: { type: "string" },
-    signature_item: { type: "string" },
-    background_story: { type: "string" },
-    mission: { type: "string" },
-    catchphrase: { type: "string" },
-    must_keep: { type: "array", items: { type: "string" } },
-    avoid: { type: "array", items: { type: "string" } },
-    prompts: {
-      type: "object",
-      additionalProperties: false,
-      required: ["complete_scene", "reference_sheet", "avatar"],
-      properties: {
-        complete_scene: { type: "string" },
-        reference_sheet: { type: "string" },
-        avatar: { type: "string" },
-      },
-    },
-    setting_description: { type: "string" },
-  },
-};
 
 export async function POST(request: Request) {
   let body: GenerateRequest;
@@ -126,7 +34,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const characterSpec = await generateCharacterSpec(body);
+    const characterSpec = body.confirmedSpec
+      ? normalizeCharacterSpec(body.confirmedSpec)
+      : await generateCharacterSpec(body);
     const [completeSceneImage, referenceSheetImage] = await Promise.all([
       generateImage(characterSpec.prompts.complete_scene),
       generateImage(characterSpec.prompts.reference_sheet),
@@ -172,7 +82,9 @@ async function generateCharacterSpec(request: GenerateRequest) {
       "根据 score_snapshot 的标签生成角色故事、人物设定集，再用人物设定集和世界背景组织完整形象图 prompt。",
       "mission、signature_item、must_keep、avoid 只作为内部生成约束，不要写进 setting_description。",
       "complete_scene prompt 必须包含英文约束：no visible text, no character name, no labels, no typography, no watermark。",
-      "reference_sheet 和 avatar prompt 也不要要求图片内出现角色名、标题、签名或文字标签。",
+      "reference_sheet prompt 必须是竖版 A4 角色设定板：左侧资料栏，中间主视图和背视图，右侧 3x3 表情格，下方细节特写、服装变化、随身物品、色板、个人空间、三视图和信息块。",
+      "reference_sheet 可以允许短标题和短标签，但不要要求长段落、角色名、签名或水印；文字应是辅助层级，不要压过角色图。",
+      "avatar prompt 不要要求图片内出现角色名、标题、签名或文字标签。",
       "输出要适合生成完整形象图、多维度设定图和给画师看的设定说明。",
     ].join("\n"),
     input: JSON.stringify(
@@ -238,7 +150,7 @@ function normalizeCharacterSpec(spec: CharacterSpec) {
     prompts: {
       ...spec.prompts,
       complete_scene: withImageTextRule(spec.prompts.complete_scene),
-      reference_sheet: withImageTextRule(spec.prompts.reference_sheet),
+      reference_sheet: withReferenceSheetLayoutRule(spec.prompts.reference_sheet),
       avatar: withImageTextRule(spec.prompts.avatar),
     },
   };
@@ -269,6 +181,27 @@ function normalizeCharacterSpec(spec: CharacterSpec) {
 function withImageTextRule(prompt: string) {
   const rule = "no visible text, no character name, no labels, no typography, no watermark";
   return prompt.includes(rule) ? prompt : `${prompt}, ${rule}`;
+}
+
+function withReferenceSheetLayoutRule(prompt: string) {
+  const layoutRule = [
+    "vertical A4 portrait character reference sheet",
+    "large full body front and back views",
+    "left biography column",
+    "right 3x3 expression grid",
+    "detail close-up panels",
+    "outfit variation row",
+    "items panel",
+    "color palette swatches",
+    "personal space scene panel",
+    "bottom turnaround strip",
+    "thin divider lines",
+    "short headings only, no long paragraphs, no watermark",
+  ].join(", ");
+
+  return prompt.includes("vertical A4 portrait character reference sheet")
+    ? prompt
+    : `${prompt}, ${layoutRule}`;
 }
 
 function isGenerateRequest(value: GenerateRequest) {

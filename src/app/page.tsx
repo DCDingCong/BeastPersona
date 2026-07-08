@@ -20,11 +20,16 @@ import { quickQuestions } from "@/data/quickQuestions";
 import { deepQuestionBank } from "@/data/deepQuestionBank";
 import type { Answer, Question } from "@/data/questionTypes";
 import {
+  buildCharacterGenerationPreview,
   type CharacterSpec,
   type DeepConfig,
   type GenerateRequest,
   type LineageMode,
 } from "@/lib/fursona";
+import {
+  applyCharacterSpecDraft,
+  type CharacterSpecDraftPatch,
+} from "@/lib/characterSpecEditing";
 import { selectDeepQuestions, type DeepFlowDepth } from "@/lib/questionFlow";
 import {
   getPreviousQuickQuestionIndex,
@@ -106,12 +111,29 @@ export default function Home() {
   const [deepConfig, setDeepConfig] = useState<DeepConfig>(defaultDeepConfig);
   const [scoreSnapshot, setScoreSnapshot] = useState<ScoreSnapshot | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
+  const [specDraft, setSpecDraft] = useState<CharacterSpecDraftPatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingIndex, setLoadingIndex] = useState(0);
 
   const activeSpec = result?.characterSpec;
   const completeImage = result?.completeSceneImage || null;
   const referenceImage = result?.referenceSheetImage || null;
+  const generationPreview = useMemo(() => {
+    const activeAnswers = mode === "quick" ? answers : deepAnswers;
+    const snapshot = scoreSnapshot || scoreAnswers(activeAnswers);
+
+    return buildCharacterGenerationPreview({
+      mode,
+      lineageMode,
+      answers: activeAnswers,
+      deepConfig: mode === "deep" ? deepConfig : undefined,
+      scoreSnapshot: snapshot,
+    });
+  }, [answers, deepAnswers, deepConfig, lineageMode, mode, scoreSnapshot]);
+  const reviewSpec = useMemo(
+    () => applyCharacterSpecDraft(generationPreview.characterSpec, specDraft || {}),
+    [generationPreview.characterSpec, specDraft],
+  );
   const remainingDeepQuestions = useMemo(
     () => selectDeepQuestions(deepAnswers, deepDepth),
     [deepAnswers, deepDepth],
@@ -126,6 +148,7 @@ export default function Home() {
     setQuestionIndex(0);
     setAnswers([]);
     setScoreSnapshot(null);
+    setSpecDraft(null);
     setError(null);
     setStep("quiz");
   }
@@ -136,6 +159,7 @@ export default function Home() {
     setDeepQuestionStack([]);
     setCurrentDeepQuestionId(null);
     setScoreSnapshot(null);
+    setSpecDraft(null);
     setError(null);
     setStep("deep");
   }
@@ -173,6 +197,7 @@ export default function Home() {
   function buildReview(nextAnswers: Answer[]) {
     const snapshot = scoreAnswers(nextAnswers);
     setScoreSnapshot(snapshot);
+    setSpecDraft(null);
     setStep("review");
   }
 
@@ -224,12 +249,15 @@ export default function Home() {
     }, 900);
 
     const activeAnswers = mode === "quick" ? answers : deepAnswers;
+    const snapshot = generationPreview.scoreSnapshot || scoreAnswers(activeAnswers);
+    const confirmedSpec = step === "review" ? reviewSpec : generationPreview.characterSpec;
     const payload: GenerateRequest = {
       mode,
       lineageMode,
       answers: activeAnswers,
       deepConfig: mode === "deep" ? deepConfig : undefined,
-      scoreSnapshot: scoreSnapshot || scoreAnswers(activeAnswers),
+      scoreSnapshot: snapshot,
+      confirmedSpec,
     };
 
     try {
@@ -300,6 +328,29 @@ export default function Home() {
 
     const text = formatSetting(activeSpec);
     await navigator.clipboard.writeText(text);
+  }
+
+  async function copyText(text: string) {
+    await navigator.clipboard.writeText(text);
+  }
+
+  function updateSpecDraft(patch: CharacterSpecDraftPatch) {
+    setSpecDraft((current) => ({
+      ...(current || {}),
+      ...patch,
+      features: patch.features
+        ? {
+            ...(current?.features || {}),
+            ...patch.features,
+          }
+        : current?.features,
+      prompts: patch.prompts
+        ? {
+            ...(current?.prompts || {}),
+            ...patch.prompts,
+          }
+        : current?.prompts,
+    }));
   }
 
   return (
@@ -410,12 +461,105 @@ export default function Home() {
 
         {step === "review" && (
           <section className="screen screen-scroll">
-            <Header onBack={backFromReview} label="生成前确认" />
-            <h2 className="question-title">准备生成兽设</h2>
-            <p className="hint">确认后会整理设定说明，并生成完整形象图和多维度设定图。</p>
+            <Header onBack={backFromReview} label="生成确认" />
+            <h2 className="question-title review-title">确认提示词与标签</h2>
+            <p className="hint">以下内容会作为本次生成的中文设定依据；确认后将直接使用这些提示词生成完整形象图和多维度设定图。</p>
+
+            <div className="preview-panel">
+              <div className="section-title">
+                <span>血统模式</span>
+                <small>{generationPreview.scoreSnapshot.lineageRecommendation === "pure" ? "系统建议：纯血" : "系统建议：混血"}</small>
+              </div>
+              <div className="lineage-grid compact-grid">
+                {lineageOptions.map((item) => (
+                  <button
+                    key={item.value}
+                    className={`lineage-pill ${lineageMode === item.value ? "selected" : ""}`}
+                    onClick={() => {
+                      setLineageMode(item.value);
+                      setSpecDraft(null);
+                    }}
+                  >
+                    <strong>{item.title}</strong>
+                    <small>{item.desc}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="summary-card preview-summary">
+              <div className="stat-grid">
+                <Stat label="主物种" value={reviewSpec.primary_species} />
+                <Stat label="血统" value={reviewSpec.lineage_mode === "pure" ? "纯血" : "混血"} />
+                <Stat label="体型" value={reviewSpec.body} />
+                <Stat label="身高" value={reviewSpec.height} />
+              </div>
+              <p>{reviewSpec.setting_description}</p>
+            </div>
+
+            <EditableCharacterSpecPanel
+              baseSpec={generationPreview.characterSpec}
+              draft={specDraft}
+              onChange={updateSpecDraft}
+              onReset={() => setSpecDraft(null)}
+            />
+
+            <div className="preview-panel">
+              <div className="section-title">
+                <span>物种排序</span>
+              </div>
+              <div className="tag-row">
+                {generationPreview.scoreSnapshot.speciesCandidates
+                  .filter((item) => item.score > 0)
+                  .slice(0, 8)
+                  .map((item) => (
+                    <span className="tag" key={item.key}>
+                      {item.species} {item.score}
+                    </span>
+                  ))}
+              </div>
+            </div>
+
+            <div className="preview-panel">
+              <div className="section-title">
+                <span>标签内容</span>
+              </div>
+              <div className="tag-group-list">
+                {generationPreview.tagGroups.map((group) => (
+                  <div className="tag-group" key={group.category}>
+                    <div className="tag-group-title">{group.categoryLabel}</div>
+                    <div className="score-tag-grid">
+                      {group.tags.map((tag) => (
+                        <span className="score-tag" key={tag.key}>
+                          <strong>{tag.label}</strong>
+                          <em>{tag.score}</em>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="preview-panel">
+              <div className="section-title">
+                <span>具体提示词</span>
+                <button
+                  className="icon-button"
+                  aria-label="复制全部提示词"
+                  onClick={() => copyText(formatPrompts(reviewSpec))}
+                >
+                  <Clipboard size={17} />
+                </button>
+              </div>
+              <PromptBlock title="完整形象图提示词" value={reviewSpec.prompts.complete_scene} />
+              <PromptBlock title="多维度设定图提示词" value={reviewSpec.prompts.reference_sheet} />
+              <PromptBlock title="头像提示词" value={reviewSpec.prompts.avatar} />
+            </div>
+
             <div className="action-stack">
               <button className="primary-action" onClick={generate}>
-                <strong>确认生成</strong>
+                <strong>确认并开始生成</strong>
                 <Sparkles size={20} />
               </button>
             </div>
@@ -432,7 +576,10 @@ export default function Home() {
                 <button
                   key={item.value}
                   className={`lineage-pill ${lineageMode === item.value ? "selected" : ""}`}
-                  onClick={() => setLineageMode(item.value)}
+                  onClick={() => {
+                    setLineageMode(item.value);
+                    setSpecDraft(null);
+                  }}
                 >
                   <strong>{item.title}</strong>
                   <small>{item.desc}</small>
@@ -472,6 +619,15 @@ export default function Home() {
             {error && <div className="error-box">{error}</div>}
             {activeSpec ? (
               <>
+                <div className="result-profile">
+                  <div>
+                    <p className="result-kicker">角色档案</p>
+                    <h2>{activeSpec.positioning || activeSpec.primary_species}</h2>
+                    <p>{activeSpec.catchphrase || activeSpec.setting_description}</p>
+                  </div>
+                  <span>{activeSpec.lineage_mode === "pure" ? "纯血" : "混血"}</span>
+                </div>
+
                 {completeImage && (
                   <div className="result-hero result-section">
                     <img src={completeImage} alt="完整形象图" />
@@ -503,6 +659,24 @@ export default function Home() {
                       <img src={referenceImage} alt="多维度设定图" />
                     </div>
                   )}
+                  <div className="dimension-panel">
+                    <div className="dimension-heading">
+                      <span>三维设定速览</span>
+                      <small>外形 / 性格 / 世界</small>
+                    </div>
+                    <DimensionBlock
+                      title="外形识别"
+                      value={`${activeSpec.body}，${activeSpec.features.ears}，${activeSpec.features.tail}`}
+                    />
+                    <DimensionBlock
+                      title="性格动势"
+                      value={activeSpec.personality_keywords.slice(0, 4).join(" / ")}
+                    />
+                    <DimensionBlock
+                      title="世界锚点"
+                      value={`${activeSpec.mission}，${activeSpec.signature_item}`}
+                    />
+                  </div>
                   {result?.imageErrors?.referenceSheetImage && (
                     <div className="error-box">{result.imageErrors.referenceSheetImage}</div>
                   )}
@@ -517,9 +691,15 @@ export default function Home() {
                   </div>
                   <div className="summary-card">
                     <div className="stat-grid">
-                      <Stat label="物种" value={activeSpec.primary_species} />
+                      <Stat label="种族" value={activeSpec.primary_species} />
+                      <Stat label="属性" value={activeSpec.colors.accent || activeSpec.colors.primary} />
                       <Stat label="身高" value={activeSpec.height} />
-                      <Stat label="血统" value={activeSpec.lineage_mode === "pure" ? "纯血" : "混血"} />
+                      <Stat label="性格" value={activeSpec.personality_keywords.slice(0, 2).join(" / ")} />
+                      <Stat label="特长" value={activeSpec.signature_item} />
+                      <Stat label="象征" value={activeSpec.visual_keywords.slice(0, 2).join(" / ")} />
+                    </div>
+                    <div className="keyword-strip">
+                      设定关键词：{activeSpec.visual_keywords.slice(0, 4).join(" / ")}
                     </div>
                     <p>{activeSpec.setting_description}</p>
                   </div>
@@ -619,11 +799,201 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function EditableCharacterSpecPanel({
+  baseSpec,
+  draft,
+  onChange,
+  onReset,
+}: {
+  baseSpec: CharacterSpec;
+  draft: CharacterSpecDraftPatch | null;
+  onChange: (patch: CharacterSpecDraftPatch) => void;
+  onReset: () => void;
+}) {
+  const value = (key: keyof CharacterSpecDraftPatch, fallback: string) => {
+    const draftValue = draft?.[key];
+    return typeof draftValue === "string" ? draftValue : fallback;
+  };
+  const featureValue = (key: keyof CharacterSpec["features"]) =>
+    draft?.features?.[key] ?? baseSpec.features[key];
+  const promptValue = (key: keyof CharacterSpec["prompts"]) =>
+    draft?.prompts?.[key] ?? baseSpec.prompts[key];
+
+  return (
+    <div className="preview-panel edit-panel">
+      <div className="section-title">
+        <span>手动编辑设定</span>
+        <button className="text-button" onClick={onReset}>
+          恢复系统草案
+        </button>
+      </div>
+      <p className="hint">这里的修改会直接用于本次生成；适合补充角色姓名以外的设定、外观细节和画面要求。</p>
+
+      <div className="form-grid edit-grid">
+        <Field label="角色定位">
+          <input
+            data-testid="review-positioning"
+            value={value("positioning", baseSpec.positioning)}
+            onChange={(event) => onChange({ positioning: event.target.value })}
+          />
+        </Field>
+        <Field label="身高">
+          <input
+            data-testid="review-height"
+            value={value("height", baseSpec.height)}
+            onChange={(event) => onChange({ height: event.target.value })}
+          />
+        </Field>
+        <Field label="体型">
+          <input
+            data-testid="review-body"
+            value={value("body", baseSpec.body)}
+            onChange={(event) => onChange({ body: event.target.value })}
+          />
+        </Field>
+        <Field label="标志物">
+          <input
+            data-testid="review-signature-item"
+            value={value("signature_item", baseSpec.signature_item)}
+            onChange={(event) => onChange({ signature_item: event.target.value })}
+          />
+        </Field>
+        <Field label="任务">
+          <input
+            data-testid="review-mission"
+            value={value("mission", baseSpec.mission)}
+            onChange={(event) => onChange({ mission: event.target.value })}
+          />
+        </Field>
+        <Field label="口头禅">
+          <input
+            data-testid="review-catchphrase"
+            value={value("catchphrase", baseSpec.catchphrase)}
+            onChange={(event) => onChange({ catchphrase: event.target.value })}
+          />
+        </Field>
+      </div>
+
+      <div className="form-grid">
+        <Field label="设定说明">
+          <textarea
+            data-testid="review-setting-description"
+            value={value("setting_description", baseSpec.setting_description)}
+            onChange={(event) => onChange({ setting_description: event.target.value })}
+          />
+        </Field>
+        <Field label="性格关键词">
+          <textarea
+            data-testid="review-personality-keywords"
+            value={draft?.personality_keywords ?? baseSpec.personality_keywords.join("\n")}
+            onChange={(event) => onChange({ personality_keywords: event.target.value })}
+          />
+        </Field>
+        <Field label="视觉关键词">
+          <textarea
+            data-testid="review-visual-keywords"
+            value={draft?.visual_keywords ?? baseSpec.visual_keywords.join("\n")}
+            onChange={(event) => onChange({ visual_keywords: event.target.value })}
+          />
+        </Field>
+      </div>
+
+      <details className="supplement-panel edit-details">
+        <summary>编辑外观细节</summary>
+        <div className="form-grid edit-grid">
+          <Field label="耳朵">
+            <input
+              data-testid="review-feature-ears"
+              value={featureValue("ears")}
+              onChange={(event) => onChange({ features: { ears: event.target.value } })}
+            />
+          </Field>
+          <Field label="尾巴">
+            <input
+              data-testid="review-feature-tail"
+              value={featureValue("tail")}
+              onChange={(event) => onChange({ features: { tail: event.target.value } })}
+            />
+          </Field>
+          <Field label="眼睛">
+            <input
+              data-testid="review-feature-eyes"
+              value={featureValue("eyes")}
+              onChange={(event) => onChange({ features: { eyes: event.target.value } })}
+            />
+          </Field>
+          <Field label="毛色">
+            <input
+              data-testid="review-feature-fur"
+              value={featureValue("fur")}
+              onChange={(event) => onChange({ features: { fur: event.target.value } })}
+            />
+          </Field>
+          <Field label="特殊标记">
+            <input
+              data-testid="review-feature-special-marks"
+              value={featureValue("special_marks")}
+              onChange={(event) => onChange({ features: { special_marks: event.target.value } })}
+            />
+          </Field>
+          <Field label="服装">
+            <input
+              data-testid="review-outfit"
+              value={value("outfit", baseSpec.outfit)}
+              onChange={(event) => onChange({ outfit: event.target.value })}
+            />
+          </Field>
+        </div>
+      </details>
+
+      <details className="supplement-panel edit-details">
+        <summary>高级：编辑图片提示词</summary>
+        <div className="form-grid">
+          <Field label="完整形象图提示词">
+            <textarea
+              data-testid="review-complete-prompt"
+              className="prompt-editor"
+              value={promptValue("complete_scene")}
+              onChange={(event) => onChange({ prompts: { complete_scene: event.target.value } })}
+            />
+          </Field>
+          <Field label="多维度设定图提示词">
+            <textarea
+              data-testid="review-reference-prompt"
+              className="prompt-editor"
+              value={promptValue("reference_sheet")}
+              onChange={(event) => onChange({ prompts: { reference_sheet: event.target.value } })}
+            />
+          </Field>
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="stat">
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function DimensionBlock({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="dimension-block">
+      <span>{title}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function PromptBlock({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="prompt-block">
+      <div className="prompt-title">{title}</div>
+      <pre>{value}</pre>
     </div>
   );
 }
@@ -653,4 +1023,12 @@ function formatSetting(spec: CharacterSpec) {
     `外观：${spec.visual_keywords.join("、")}`,
     `背景：${spec.background_story}`,
   ].join("\n");
+}
+
+function formatPrompts(spec: CharacterSpec) {
+  return [
+    `完整形象图提示词：\n${spec.prompts.complete_scene}`,
+    `多维度设定图提示词：\n${spec.prompts.reference_sheet}`,
+    `头像提示词：\n${spec.prompts.avatar}`,
+  ].join("\n\n");
 }

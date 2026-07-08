@@ -3,6 +3,7 @@ import type { Answer } from "@/data/questionTypes";
 import { scoreAnswers } from "@/lib/scoring";
 import { describe, expect, it } from "vitest";
 import {
+  buildCharacterGenerationPreview,
   buildFallbackCharacterSpec,
   inferCharacterBlueprint,
   type GenerateRequest,
@@ -90,6 +91,34 @@ describe("scoreAnswers", () => {
     expect(snapshot.lineageRecommendation).toBe("pure");
     expect(snapshot.lineageScores.pure).toBeGreaterThan(snapshot.lineageScores.hybrid);
   });
+
+  it("does not treat general structure and boundary answers as dragon-specific", () => {
+    const answers: Answer[] = [
+      { questionId: "q01_station_focus", optionId: "camera" },
+      { questionId: "q02_token", optionId: "badge" },
+      { questionId: "q03_called_out", optionId: "proof" },
+      { questionId: "q04_painting", optionId: "cloud_temple" },
+      { questionId: "q05_route", optionId: "old_map" },
+      { questionId: "q06_letter", optionId: "seal" },
+      { questionId: "q07_signal", optionId: "under_marks" },
+      { questionId: "q08_recognition", optionId: "silhouette" },
+      { questionId: "q09_help", optionId: "assess" },
+      { questionId: "q10_knock", optionId: "behind_door" },
+      { questionId: "q11_mission", optionId: "gate" },
+      { questionId: "q12_result_focus", optionId: "clear" },
+    ];
+
+    const snapshot = scoreAnswers(answers);
+
+    expect(snapshot.speciesCandidates[0].species).toBe("熊");
+    expect(snapshot.speciesCandidates[1].species).toBe("麒麟");
+  });
+
+  it("defaults to pure lineage when there is no scoring evidence", () => {
+    const snapshot = scoreAnswers([]);
+
+    expect(snapshot.lineageRecommendation).toBe("pure");
+  });
 });
 
 describe("inferCharacterBlueprint", () => {
@@ -158,6 +187,177 @@ describe("inferCharacterBlueprint", () => {
     expect(blueprint.lineageMode).toBe("hybrid");
     expect(Object.keys(blueprint.speciesRatio).length).toBeGreaterThan(1);
   });
+
+  it("does not fill forced hybrid secondary species from zero-score candidates", () => {
+    const blueprint = inferCharacterBlueprint({
+      mode: "quick",
+      lineageMode: "hybrid",
+      answers: [],
+    });
+
+    expect(blueprint.secondarySpecies).toEqual([]);
+    expect(blueprint.speciesRatio).toEqual({ 狐: 70, 幻想异化: 30 });
+  });
+
+  it("uses movement and mass tags when inferring body type", () => {
+    const agileBlueprint = inferCharacterBlueprint({
+      mode: "quick",
+      lineageMode: "ai",
+      answers: [
+        { questionId: "q02_token", optionId: "blade" },
+        { questionId: "q05_route", optionId: "shortest" },
+        { questionId: "q10_knock", optionId: "side_exit" },
+      ],
+    });
+    const heavyBlueprint = inferCharacterBlueprint({
+      mode: "deep",
+      lineageMode: "ai",
+      answers: [
+        { questionId: "db01_intro_shot", optionId: "break_in" },
+        { questionId: "db06_action_style", optionId: "pressure" },
+        { questionId: "db07_danger_source", optionId: "body_pressure" },
+      ],
+    });
+
+    expect(agileBlueprint.bodyType).toBe("轻盈修长，适合快速行动");
+    expect(heavyBlueprint.bodyType).toBe("厚重结实，肩背有力量感");
+  });
+
+  it("derives body type from animal-linked body tags", () => {
+    const bearBlueprint = inferCharacterBlueprint({
+      mode: "quick",
+      lineageMode: "ai",
+      scoreSnapshot: {
+        tags: { bear: 3, strong: 2, chubby: 1.4, loyal: 1 },
+        speciesCandidates: [{ key: "bear", species: "熊", score: 6 }],
+        lineageScores: { pure: 1, hybrid: 0 },
+        lineageRecommendation: "pure",
+        selectedEffects: {
+          missions: [],
+          palettes: [],
+          roles: [],
+          mustKeep: [],
+          avoid: [],
+          promptHints: [],
+        },
+      },
+    });
+    const tigerBlueprint = inferCharacterBlueprint({
+      mode: "quick",
+      lineageMode: "ai",
+      scoreSnapshot: {
+        tags: { tiger: 3, strong: 2.2, wild: 1, dark: 0.5 },
+        speciesCandidates: [{ key: "tiger", species: "虎", score: 5 }],
+        lineageScores: { pure: 1, hybrid: 0 },
+        lineageRecommendation: "pure",
+        selectedEffects: {
+          missions: [],
+          palettes: [],
+          roles: [],
+          mustKeep: [],
+          avoid: [],
+          promptHints: [],
+        },
+      },
+    });
+
+    expect(bearBlueprint.bodyType).toBe("壮实偏圆，肩背厚，有稳定重量感");
+    expect(tigerBlueprint.bodyType).toBe("精悍强壮，肩臂有爆发力");
+  });
+
+  it("keeps primary species body as the main body frame", () => {
+    const blueprint = inferCharacterBlueprint({
+      mode: "quick",
+      lineageMode: "ai",
+      scoreSnapshot: {
+        tags: {
+          bear: 2.2,
+          strong: 1.6,
+          chubby: 0.6,
+          heavy: 0.4,
+          control: 4,
+          academy: 3.3,
+          pure_bias: 2.2,
+        },
+        speciesCandidates: [
+          { key: "bear", species: "熊", score: 9.61 },
+          { key: "mech", species: "机械义体", score: 4.71 },
+        ],
+        lineageScores: { pure: 1, hybrid: 0 },
+        lineageRecommendation: "pure",
+        selectedEffects: {
+          missions: [],
+          palettes: [],
+          roles: [],
+          mustKeep: [],
+          avoid: [],
+          promptHints: [],
+        },
+      },
+    });
+
+    expect(blueprint.primarySpecies).toBe("熊");
+    expect(blueprint.bodyType).toBe("壮实偏圆，肩背厚，有稳定重量感");
+    expect(blueprint.height).toBe("188cm");
+  });
+
+  it("uses answer body scores as a minority detail when they conflict with species body", () => {
+    const blueprint = inferCharacterBlueprint({
+      mode: "quick",
+      lineageMode: "ai",
+      scoreSnapshot: {
+        tags: {
+          bear: 2.2,
+          slim: 2,
+          control: 2,
+          academy: 1.6,
+        },
+        speciesCandidates: [
+          { key: "bear", species: "熊", score: 8 },
+          { key: "leopard", species: "豹", score: 5 },
+        ],
+        lineageScores: { pure: 1, hybrid: 0 },
+        lineageRecommendation: "pure",
+        selectedEffects: {
+          missions: [],
+          palettes: [],
+          roles: [],
+          mustKeep: [],
+          avoid: [],
+          promptHints: [],
+        },
+      },
+    });
+
+    expect(blueprint.primarySpecies).toBe("熊");
+    expect(blueprint.bodyType).toContain("壮实偏圆为主");
+    expect(blueprint.bodyType).toContain("轻盈修长");
+    expect(blueprint.bodyType).toContain("70%");
+    expect(blueprint.bodyType).toContain("30%");
+  });
+});
+
+describe("buildCharacterGenerationPreview", () => {
+  it("prepares Chinese tag groups and concrete prompts for the confirmation screen", () => {
+    const preview = buildCharacterGenerationPreview({
+      mode: "quick",
+      lineageMode: "ai",
+      answers: [
+        { questionId: "q01_station_focus", optionId: "camera" },
+        { questionId: "q02_token", optionId: "badge" },
+        { questionId: "q04_painting", optionId: "mist_root" },
+        { questionId: "q12_result_focus", optionId: "clear" },
+      ],
+    });
+
+    expect(preview.tagGroups.map((group) => group.categoryLabel)).toContain("物种倾向");
+    expect(preview.tagGroups.map((group) => group.categoryLabel)).toContain("体型倾向");
+    expect(preview.tagGroups.flatMap((group) => group.tags).some((tag) => tag.label === "熊")).toBe(true);
+    expect(preview.characterSpec.prompts.complete_scene).toContain("no visible text");
+    expect(preview.characterSpec.prompts.reference_sheet).toContain(preview.characterSpec.primary_species);
+    expect(preview.characterSpec.prompts.reference_sheet).toContain("vertical A4 portrait");
+    expect(preview.characterSpec.prompts.reference_sheet).toContain("3x3 expression grid");
+  });
 });
 
 describe("buildFallbackCharacterSpec", () => {
@@ -178,5 +378,7 @@ describe("buildFallbackCharacterSpec", () => {
     expect(spec.prompts.complete_scene).toContain("no visible text");
     expect(spec.prompts.complete_scene).toContain("no character name");
     expect(spec.prompts.reference_sheet).toContain(spec.primary_species);
+    expect(spec.prompts.reference_sheet).toContain("outfit variation row");
+    expect(spec.prompts.reference_sheet).toContain("color palette swatches");
   });
 });

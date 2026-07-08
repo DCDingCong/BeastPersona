@@ -139,7 +139,7 @@ function buildLineageScores(
 function recommendLineage(scores: { pure: number; hybrid: number }) {
   if (scores.hybrid - scores.pure >= lineageThresholds.hybridAdvantage) return "hybrid";
   if (scores.pure - scores.hybrid >= lineageThresholds.pureAdvantage) return "pure";
-  return scores.hybrid >= scores.pure ? "hybrid" : "pure";
+  return scores.hybrid > scores.pure ? "hybrid" : "pure";
 }
 
 function uniqueEffects(effects: ScoreSnapshot["selectedEffects"]) {

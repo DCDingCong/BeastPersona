@@ -31,7 +31,9 @@ Fursona Atelier is a mobile-first AI fursona design tool. Users answer a subtle 
 - **Subtle scoring**: users see narrative choices while the backend accumulates personality, aesthetic, world, material, lineage, and species signals.
 - **Local rule engine**: creates a `scoreSnapshot`, species candidates, lineage recommendation, and conflict hints before AI generation.
 - **Lineage control**: supports `AI recommended`, `pure`, and `hybrid` generation modes to reduce random trait mixing.
+- **Editable confirmation step**: before generation, users can edit positioning, height, body type, keywords, visual details, and image prompts. Edits are applied to the current generation.
 - **Two consistent image outputs**: the complete scene and reference sheet are derived from the same structured spec to reduce character drift.
+- **Board-style reference sheet**: the reference output is guided toward a vertical character sheet with front/back views, expression grid, detail close-ups, outfit variations, items, palette, personal-space scene, and turnaround strip.
 - **Result actions**: save images, copy setting text, and retry a single image.
 
 ## Preview
@@ -47,7 +49,8 @@ Fixed Q12 or deep branching question bank
 -> Local scoring engine creates scoreSnapshot
 -> Pre-generation review and conflict detection
 -> Rule engine infers species and lineage
--> OpenAI text model generates character_spec_json
+-> Confirmation page edits the character spec and image prompts
+-> Generate or confirm character_spec_json
 -> Two image prompts are derived from the same JSON
 -> OpenAI image model generates complete scene and reference sheet in parallel
 -> Result page receives character spec, complete image, and reference image
@@ -68,6 +71,7 @@ Fixed Q12 or deep branching question bank
 ```text
 src/app/page.tsx                         Mobile UI and interaction flow
 src/app/api/generate/route.ts            AI generation endpoint
+src/app/api/generate/schema.ts           Structured character-spec JSON Schema
 src/app/api/regenerate-image/route.ts    Single-image retry endpoint
 src/data/quickQuestions.ts               Fixed 12-question quick bank
 src/data/deepQuestionBank.ts             Local deep branching question bank
@@ -76,6 +80,7 @@ src/data/scoringRules.ts                 Combination boosts and lineage threshol
 src/lib/scoring.ts                       Local scoring engine
 src/lib/questionFlow.ts                  Deep branch selector
 src/lib/conflicts.ts                     Setting conflict detection
+src/lib/characterSpecEditing.ts          Confirmation-page draft merge logic
 src/lib/fursona.ts                       Fursona rule inference and fallback spec
 src/lib/openai.ts                        OpenAI SDK configuration
 public/                                  Static images for GitHub and frontend use
@@ -137,7 +142,7 @@ npm.cmd run preview
 
 ### `POST /api/generate`
 
-Generates the structured character spec, complete scene, and reference sheet. If `OPENAI_API_KEY` is missing, the endpoint returns a clear error instead of fake demo data.
+Generates the structured character spec, complete scene, and reference sheet. The frontend can pass an edited `confirmedSpec` from the confirmation page, and the backend will generate images from that spec directly. If `OPENAI_API_KEY` is missing, the endpoint returns a clear error instead of fake demo data.
 
 ### `POST /api/regenerate-image`
 
@@ -149,14 +154,16 @@ Receives an existing prompt and redraws one image without regenerating the chara
 - Each answer has weak weights and usually affects 3-5 tags, so one answer cannot decide the final species.
 - Strong results require tag combinations, such as `mystery + slim + fox` for fox candidates or `control + mythic_bias + scale` for dragon or qilin candidates.
 - `Pure` keeps one primary species and blocks obvious secondary traits. `Hybrid` allows up to 3 lineages, with secondary traits mapped to concrete body parts, materials, or equipment.
-- Image prompts enforce `no visible text, no character name, no labels, no typography, no watermark`.
+- Complete-scene prompts enforce `no visible text, no character name, no labels, no typography, no watermark`.
+- Reference-sheet prompts use a vertical A4 board layout and may include short headings or tiny labels, but avoid long paragraphs, signatures, and watermarks.
+- Confirmation-page edits automatically append `User edited requirements` to image prompts so user edits affect generation.
 
 ## Not Included Yet
 
 - Result persistence / history
 - Community feed
 - Multi-character relationship graph
-- Fine-grained post-generation editing
+- Fine-grained post-generation editing (pre-generation editing is supported on the confirmation page)
 - Inpainting / partial redraw
 - Live2D / VTuber output
 - Commission marketplace

@@ -31,7 +31,9 @@
 - **隐藏评分机制**：用户看到的是叙事化选择，后台累积人格、审美、世界观、材质、血统和物种信号。
 - **本地规则引擎**：先生成 `scoreSnapshot`、候选物种、血统建议和冲突提示，再进入 AI 生成。
 - **血统类型控制**：支持 `AI 推荐`、`纯血`、`混血` 三种生成模式，减少随机拼接感。
+- **生成前可编辑**：确认页可直接修改定位、身高、体型、关键词、外观细节和图片提示词，修改会写入本次生成。
 - **双图一致输出**：完整场景图和参考设定图都来自同一份结构化角色设定，降低角色漂移。
+- **设定板式参考图**：多维度设定图按竖版角色设定板组织，包含主视图、背视图、表情格、细节特写、服装变化、随身物品、色板、个人空间和三视图。
 - **结果页操作**：支持保存图片、复制设定文本、单张图片重新生成。
 
 ## 预览
@@ -47,7 +49,8 @@
 -> 本地评分引擎生成 scoreSnapshot
 -> 生成前确认与冲突检测
 -> 规则引擎推演物种和血统
--> OpenAI 文本模型生成 character_spec_json
+-> 确认页手动编辑角色设定与图片 prompt
+-> 生成或确认 character_spec_json
 -> 从同一份 JSON 派生完整图与设定图 prompt
 -> OpenAI 图片模型并行生成两张图
 -> 结果页展示角色设定、完整图和参考图
@@ -68,6 +71,7 @@
 ```text
 src/app/page.tsx                         移动端主界面与交互流程
 src/app/api/generate/route.ts            AI 生成接口
+src/app/api/generate/schema.ts           结构化角色设定 JSON Schema
 src/app/api/regenerate-image/route.ts    单张图片重试接口
 src/data/quickQuestions.ts               固定 Q12 快速题库
 src/data/deepQuestionBank.ts             本地深度分支题库
@@ -76,6 +80,7 @@ src/data/scoringRules.ts                 组合触发和血统阈值
 src/lib/scoring.ts                       本地评分引擎
 src/lib/questionFlow.ts                  深度分支抽题
 src/lib/conflicts.ts                     设定冲突检测
+src/lib/characterSpecEditing.ts          确认页编辑草案合并逻辑
 src/lib/fursona.ts                       兽设规则推演与 fallback 设定
 src/lib/openai.ts                        OpenAI SDK 配置读取
 public/                                  GitHub 与前端可用的静态示例图
@@ -137,7 +142,7 @@ npm.cmd run preview
 
 ### `POST /api/generate`
 
-生成结构化角色设定、完整形象图和多维度设定图。缺少 `OPENAI_API_KEY` 时会返回明确错误，不使用伪造演示数据。
+生成结构化角色设定、完整形象图和多维度设定图。前端可传入确认页编辑后的 `confirmedSpec`，后端会用它直接生成图片。缺少 `OPENAI_API_KEY` 时会返回明确错误，不使用伪造演示数据。
 
 ### `POST /api/regenerate-image`
 
@@ -149,14 +154,16 @@ npm.cmd run preview
 - 单个答案只提供弱权重，通常影响 3-5 个标签，避免一题决定最终物种。
 - 明显结果必须由多标签组合触发，例如 `mystery + slim + fox` 提高狐系候选，`control + mythic_bias + scale` 提高龙或麒麟候选。
 - `纯血` 只保留一个主物种，禁止明显副血统特征；`混血` 最多 3 个血统，副血统必须落在具体身体部位、材质或装备上。
-- 图片 prompt 强制加入 `no visible text, no character name, no labels, no typography, no watermark`。
+- 完整形象图 prompt 强制加入 `no visible text, no character name, no labels, no typography, no watermark`。
+- 多维度设定图 prompt 使用竖版 A4 设定板布局，允许短标题和短标签，但避免长段落、签名和水印。
+- 确认页编辑会自动追加 `User edited requirements` 到图片 prompt，确保用户修改真正影响生成。
 
 ## 暂不包含
 
 - 结果持久化 / 历史记录
 - 社区作品流
 - 多角色关系网
-- 生成后细粒度微调
+- 生成后细粒度微调（确认页已支持生成前编辑）
 - 局部重绘 / inpainting
 - Live2D / VTuber 输出
 - 约稿市场

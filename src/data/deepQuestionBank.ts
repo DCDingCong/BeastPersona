@@ -8,7 +8,7 @@ export const deepQuestionBank: Question[] = [
     options: [
       { id: "reflection", label: "靴底踩过积水，倒影先出现", scores: { mystery: 1, dark: 0.8, slim: 0.5, fox: 0.4 } },
       { id: "protect", label: "一只手把别人护到身后", scores: { loyal: 1, soft: 0.4, dog: 0.6, wolf: 0.4 } },
-      { id: "high_view", label: "高处俯视全局的侧影", scores: { control: 1, alone: 0.6, owl: 0.5, dragon: 0.4 } },
+      { id: "high_view", label: "高处俯视全局的侧影", scores: { control: 1, alone: 0.6, snow_leopard: 0.5, dragon: 0.4 } },
       { id: "break_in", label: "破门而入的强轮廓", scores: { wild: 1, heavy: 0.8, lion: 0.6, wolf: 0.5 } },
     ],
   },
@@ -29,7 +29,7 @@ export const deepQuestionBank: Question[] = [
     title: "如果角色必须隐藏身份，最可能隐藏哪里？",
     options: [
       { id: "ears_or_horns", label: "耳朵或角的轮廓", scores: { hybrid_bias: 0.7, scale: 0.8, dragon: 0.6, fox: 0.4, mythic_bias: 0.5 } },
-      { id: "eye_color", label: "眼睛的颜色", scores: { mystery: 0.8, dark: 0.4, serpent: 0.4, raven: 0.4 } },
+      { id: "eye_color", label: "眼睛的颜色", scores: { mystery: 0.8, dark: 0.4, serpent: 0.4, snow_leopard: 0.4 } },
       { id: "tail_shadow", label: "尾巴或背后的影子", scores: { fluffy: 0.8, fox: 0.6, wolf: 0.4 } },
       { id: "joints", label: "关节处的结构", scores: { mechanical_bias: 0.9, cyber: 0.7, mech: 0.8 } },
     ],
@@ -40,7 +40,7 @@ export const deepQuestionBank: Question[] = [
     title: "你更喜欢哪种“不说话也能传达性格”的方式？",
     options: [
       { id: "near_exit", label: "永远站在离出口最近的位置", scores: { alone: 0.8, control: 0.5, wolf: 0.5 } },
-      { id: "tidy_objects", label: "会把小物件摆得很整齐", scores: { control: 0.8, academy: 0.5, owl: 0.5 } },
+      { id: "tidy_objects", label: "会把小物件摆得很整齐", scores: { control: 0.8, academy: 0.5, bear: 0.5 } },
       { id: "fast_casual", label: "看似漫不经心，反应很快", scores: { chaos: 0.7, slim: 0.6, fox: 0.6, cat: 0.4 } },
       { id: "distance_gap", label: "对熟人有明显的距离差", scores: { loyal: 0.7, mystery: 0.4, dog: 0.5, fox: 0.4 } },
     ],
@@ -50,9 +50,9 @@ export const deepQuestionBank: Question[] = [
     branch: "base",
     title: "角色更像从哪种地方走出来？",
     options: [
-      { id: "rain_rooftop", label: "雨夜楼顶和广告灯牌之间", scores: { cyber: 1, dark: 0.5, mech: 0.5, raven: 0.4 } },
+      { id: "rain_rooftop", label: "雨夜楼顶和广告灯牌之间", scores: { cyber: 1, dark: 0.5, mech: 0.5, tiger: 0.4 } },
       { id: "mist_road", label: "雾气很重的旧林道", scores: { forest: 1, mystery: 0.4, deer: 0.6, fox: 0.4 } },
-      { id: "sand_station", label: "风沙里的废弃交通站", scores: { wasteland: 1, wild: 0.4, wolf: 0.5, raven: 0.4 } },
+      { id: "sand_station", label: "风沙里的废弃交通站", scores: { wasteland: 1, wild: 0.4, wolf: 0.5, tiger: 0.4 } },
       { id: "cloud_altar", label: "云层下的古祭台", scores: { chinese: 1, mythic_bias: 0.8, dragon: 0.7, qilin: 0.5 } },
     ],
   },
@@ -61,7 +61,7 @@ export const deepQuestionBank: Question[] = [
     branch: "base",
     title: "角色的行动方式更接近？",
     options: [
-      { id: "observe_then_move", label: "先观察三秒，再移动", scores: { alone: 0.7, control: 0.5, owl: 0.4, wolf: 0.4 } },
+      { id: "observe_then_move", label: "先观察三秒，再移动", scores: { alone: 0.7, control: 0.5, snow_leopard: 0.4, wolf: 0.4 } },
       { id: "adjust_while_moving", label: "边行动边修正路线", scores: { slim: 0.8, chaos: 0.4, fox: 0.5, leopard: 0.5 } },
       { id: "protect_first", label: "先保护身边人，再处理目标", scores: { loyal: 1, soft: 0.4, dog: 0.7, deer: 0.4 } },
       { id: "pressure", label: "直接制造压迫感，让对方退让", scores: { wild: 0.8, heavy: 0.6, lion: 0.6, dragon: 0.4 } },
@@ -273,7 +273,7 @@ export const deepQuestionBank: Question[] = [
       { id: "contract", label: "被召回的旧契约执行者", scores: { control: 0.6, dragon: 0.6 }, effects: { mission: "执行旧契约" } },
       { id: "guardian", label: "失去供奉的守护兽", scores: { loyal: 0.6, qilin: 0.6 }, effects: { role: "守护者" } },
       { id: "sealed", label: "被封印过的异类", scores: { mystery: 0.6, serpent: 0.5, hybrid_bias: 0.5 } },
-      { id: "archivist", label: "云海神殿的记录者", scores: { academy: 0.5, chinese: 0.6, owl: 0.3 }, effects: { role: "记录者" } },
+      { id: "archivist", label: "云海神殿的记录者", scores: { academy: 0.5, chinese: 0.6, qilin: 0.3 }, effects: { role: "记录者" } },
     ],
   },
   {
@@ -281,9 +281,9 @@ export const deepQuestionBank: Question[] = [
     branch: "special",
     title: "如果有羽翼或羽毛，应该更像？",
     options: [
-      { id: "cloak", label: "披风边缘的羽状轮廓", scores: { feather: 0.7, raven: 0.6, subtle_hybrid: 0.5 } },
-      { id: "wings", label: "明确的翅膀结构", scores: { feather: 1, hybrid_bias: 0.6, eagle: 0.5 } },
-      { id: "ornament", label: "面部或耳后的羽饰", scores: { feather: 0.5, owl: 0.5, commission_ready: 0.3 } },
+      { id: "cloak", label: "披风边缘的羽状轮廓", scores: { feather: 0.7, tiger: 0.4, subtle_hybrid: 0.5 } },
+      { id: "wings", label: "明确的翅膀结构", scores: { feather: 1, hybrid_bias: 0.6, dragon: 0.4 } },
+      { id: "ornament", label: "面部或耳后的羽饰", scores: { feather: 0.5, snow_leopard: 0.4, commission_ready: 0.3 } },
       { id: "none", label: "不需要羽翼", scores: { avoid_wings: 0.8, pure_bias: 0.4 } },
     ],
   },
