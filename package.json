@@ -1,12 +1,15 @@
 {
   "name": "fursona-atelier",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "DingC",
   "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",
+    "build:android:web": "node scripts/build-android-web.mjs",
+    "android:sync": "npm run build:android:web && cap sync android",
+    "android:apk": "npm run android:sync && cd android && gradlew.bat assembleDebug",
     "preview": "next start --hostname 127.0.0.1 --port 3000",
     "start": "next start",
     "lint": "eslint",
@@ -20,6 +23,9 @@
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "@tailwindcss/postcss": "latest",
     "@types/node": "latest",
     "@types/react": "latest",

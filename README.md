@@ -18,7 +18,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue" />
 </p>
 
-**版本：** V1.0.0<br>
+**版本：** V1.1.0<br>
 **作者：** DingC<br>
 **协议：** [MIT](./LICENSE)
 
@@ -32,9 +32,11 @@
 - **本地规则引擎**：先生成 `scoreSnapshot`、候选物种、血统建议和冲突提示，再进入 AI 生成。
 - **血统类型控制**：支持 `AI 推荐`、`纯血`、`混血` 三种生成模式，减少随机拼接感。
 - **生成前可编辑**：确认页可直接修改定位、身高、体型、关键词、外观细节和图片提示词，修改会写入本次生成。
+- **自定义模型设置**：可在应用内填写兼容 OpenAI 的模型 URL、API key、文本模型名称和图片模型名称；请求设置优先于服务端 `.env.local`。
 - **双图一致输出**：完整场景图和参考设定图都来自同一份结构化角色设定，降低角色漂移。
 - **设定板式参考图**：多维度设定图按竖版角色设定板组织，包含主视图、背视图、表情格、细节特写、服装变化、随身物品、色板、个人空间和三视图。
-- **结果页操作**：支持保存图片、复制设定文本、单张图片重新生成。
+- **结果页操作**：支持保存图片、复制设定文本、单张图片重新生成，以及从选择页重新开始。
+- **Android 包装**：内置 Capacitor Android 工程和静态导出脚本，可在具备 JDK 与 Android SDK 的机器上构建 APK。
 
 ## 预览
 
@@ -83,6 +85,10 @@ src/lib/conflicts.ts                     设定冲突检测
 src/lib/characterSpecEditing.ts          确认页编辑草案合并逻辑
 src/lib/fursona.ts                       兽设规则推演与 fallback 设定
 src/lib/openai.ts                        OpenAI SDK 配置读取
+src/lib/openaiSettings.ts                前后端共用的模型设置清洗逻辑
+src/lib/clientGeneration.ts              Android / 静态包直连图片生成兜底
+capacitor.config.ts                      Android Capacitor 包装配置
+android/                                 Capacitor 生成的 Android 工程
 public/                                  GitHub 与前端可用的静态示例图
 assets/                                  产品视觉参考图
 docs/                                    PRD、题库和实现计划文档
@@ -135,18 +141,50 @@ npm.cmd run preview
 | `npm.cmd run build` | 生产构建 |
 | `npm.cmd run preview` | 在 `127.0.0.1:3000` 启动生产预览 |
 | `npm.cmd run start` | 启动已构建的生产应用 |
+| `npm.cmd run build:android:web` | 生成 Android WebView 使用的 `out/` 静态资源 |
+| `npm.cmd run android:sync` | 构建静态资源并同步到 Capacitor Android 工程 |
+| `npm.cmd run android:apk` | 同步资源并调用 Gradle 构建 Debug APK |
 | `npm.cmd test` | 运行 Vitest |
 | `npm.cmd run lint` | 运行 ESLint |
+
+## 应用内模型设置
+
+首页右上角的设置按钮可填写：
+
+- `模型 URL`：兼容 OpenAI 的 `/v1` base URL，例如 `https://api.openai.com/v1`。
+- `API Key`：当前设备用于生成的 key。
+- `文本模型名称`：用于服务端结构化设定生成的模型，默认 `gpt-4.1-mini`。
+- `图片模型名称`：用于图片生成和重试的模型，默认 `gpt-image-2`。
+
+这些设置保存在当前浏览器或 APK 的 `localStorage` 中，不会提交到仓库。普通 Web 部署会优先把设置随请求传给 `/api/generate` 与 `/api/regenerate-image`；Android 静态包没有 Next API runtime，因此当 `/api/*` 不可用时，会使用本机设置直接请求图片生成接口。
+
+## Android APK
+
+本项目使用 Capacitor 包装 Android WebView：
+
+```powershell
+npm.cmd run build:android:web
+npm.cmd run android:sync
+npm.cmd run android:apk
+```
+
+`android:apk` 需要本机安装 JDK 17+、Android SDK，并正确设置 `JAVA_HOME` 与 `ANDROID_HOME` 或 `ANDROID_SDK_ROOT`。构建成功后 Debug APK 通常位于：
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+当前开发机已经验证 `build:android:web` 和 `android:sync` 可运行；但缺少 `java` 和 `JAVA_HOME`，因此无法在此环境直接产出 APK 文件。
 
 ## API
 
 ### `POST /api/generate`
 
-生成结构化角色设定、完整形象图和多维度设定图。前端可传入确认页编辑后的 `confirmedSpec`，后端会用它直接生成图片。缺少 `OPENAI_API_KEY` 时会返回明确错误，不使用伪造演示数据。
+生成结构化角色设定、完整形象图和多维度设定图。前端可传入确认页编辑后的 `confirmedSpec`，后端会用它直接生成图片。请求体支持可选 `aiSettings`，用于覆盖本次请求的 base URL、key 和模型名称。缺少可用 API key 时会返回明确错误，不使用伪造演示数据。
 
 ### `POST /api/regenerate-image`
 
-接收已有 prompt 并重绘单张图片，不重新生成角色设定。
+接收已有 prompt 并重绘单张图片，不重新生成角色设定。请求体同样支持可选 `aiSettings`。
 
 ## 生成规则摘要
 
@@ -171,7 +209,8 @@ npm.cmd run preview
 ## 注意事项
 
 - 不要提交 `.env.local`、API key 或任何 secret。
-- 如果替换为兼容 OpenAI 的服务，需要确认该服务同时兼容 Responses API 和 Images API。
+- 如果替换为兼容 OpenAI 的服务，需要确认 Web 服务端同时兼容 Responses API 和 Images API；Android 静态包至少需要可访问 Images API。
+- Android 静态包会在本机保存并使用用户填写的 API key，请只在可信设备上使用。
 - 图片生成成本、耗时和最终质量取决于所选模型与服务商，推荐使用 `gpt-image-2`。
 - 图片质量波动、细节不稳定或风格漂移通常属于图片模型能力边界，不代表本地规则推演一定出错。
-- 当前 V1.0.0 以快速生成流程为主要发布范围；精细模式题库会在后续版本继续完善。
+- 当前 V1.1.0 以自定义模型设置和 Android 包装为主要发布范围；精细模式题库会在后续版本继续完善。

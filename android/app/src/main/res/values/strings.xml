@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">兽格造像馆</string>
+    <string name="title_activity_main">兽格造像馆</string>
+    <string name="package_name">com.dingc.fursonaatelier</string>
+    <string name="custom_url_scheme">com.dingc.fursonaatelier</string>
+</resources>

@@ -1,20 +1,55 @@
 import OpenAI from "openai";
+import {
+  defaultImageModel,
+  defaultTextModel,
+  sanitizeOpenAISettings,
+  type OpenAIRequestSettings,
+  type ResolvedOpenAISettings,
+} from "./openaiSettings";
+
+export {
+  sanitizeOpenAISettings,
+  type OpenAIRequestSettings,
+  type ResolvedOpenAISettings,
+} from "./openaiSettings";
 
 let client: OpenAI | null = null;
 
-export function hasOpenAIKey() {
-  return Boolean(process.env.OPENAI_API_KEY);
+export function resolveOpenAISettings(
+  settings?: OpenAIRequestSettings,
+): ResolvedOpenAISettings {
+  const sanitized = sanitizeOpenAISettings(settings);
+
+  return {
+    apiKey: sanitized.apiKey || process.env.OPENAI_API_KEY || undefined,
+    baseURL: sanitized.baseURL || getOpenAIBaseURL(),
+    textModel: sanitized.textModel || process.env.OPENAI_TEXT_MODEL || defaultTextModel,
+    imageModel: sanitized.imageModel || process.env.OPENAI_IMAGE_MODEL || defaultImageModel,
+  };
 }
 
-export function getOpenAIClient() {
-  if (!process.env.OPENAI_API_KEY) {
+export function hasOpenAIKey(settings?: OpenAIRequestSettings) {
+  return Boolean(resolveOpenAISettings(settings).apiKey);
+}
+
+export function getOpenAIClient(settings?: OpenAIRequestSettings) {
+  const resolved = resolveOpenAISettings(settings);
+
+  if (!resolved.apiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  if (settings && Object.keys(sanitizeOpenAISettings(settings)).length > 0) {
+    return new OpenAI({
+      apiKey: resolved.apiKey,
+      baseURL: resolved.baseURL,
+    });
   }
 
   if (!client) {
     client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      baseURL: getOpenAIBaseURL(),
+      apiKey: resolved.apiKey,
+      baseURL: resolved.baseURL,
     });
   }
 
@@ -27,9 +62,9 @@ export function getOpenAIBaseURL() {
 }
 
 export function getTextModel() {
-  return process.env.OPENAI_TEXT_MODEL || "gpt-4.1-mini";
+  return resolveOpenAISettings().textModel;
 }
 
 export function getImageModel() {
-  return process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
+  return resolveOpenAISettings().imageModel;
 }

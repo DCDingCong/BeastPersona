@@ -4,7 +4,12 @@ import {
   type CharacterSpec,
   type GenerateRequest,
 } from "@/lib/fursona";
-import { getImageModel, getOpenAIClient, getTextModel, hasOpenAIKey } from "@/lib/openai";
+import {
+  getOpenAIClient,
+  hasOpenAIKey,
+  resolveOpenAISettings,
+  type OpenAIRequestSettings,
+} from "@/lib/openai";
 import { characterSpecSchema } from "./schema";
 
 export const runtime = "nodejs";
@@ -23,7 +28,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "生成参数不完整。" }, { status: 400 });
   }
 
-  if (!hasOpenAIKey()) {
+  if (!hasOpenAIKey(body.aiSettings)) {
     return NextResponse.json(
       {
         error:
@@ -38,8 +43,8 @@ export async function POST(request: Request) {
       ? normalizeCharacterSpec(body.confirmedSpec)
       : await generateCharacterSpec(body);
     const [completeSceneImage, referenceSheetImage] = await Promise.all([
-      generateImage(characterSpec.prompts.complete_scene),
-      generateImage(characterSpec.prompts.reference_sheet),
+      generateImage(characterSpec.prompts.complete_scene, body.aiSettings),
+      generateImage(characterSpec.prompts.reference_sheet, body.aiSettings),
     ]);
 
     return NextResponse.json({
@@ -68,10 +73,11 @@ type GeneratedCharacterSpec = Omit<CharacterSpec, "species_ratio"> & {
 };
 
 async function generateCharacterSpec(request: GenerateRequest) {
-  const client = getOpenAIClient();
+  const client = getOpenAIClient(request.aiSettings);
+  const settings = resolveOpenAISettings(request.aiSettings);
   const blueprint = inferCharacterBlueprint(request);
   const response = await client.responses.create({
-    model: getTextModel(),
+    model: settings.textModel,
     instructions: [
       "你是一个中文兽设产品的设定师。",
       "基于用户输入和规则引擎草案，生成结构化角色设定。",
@@ -110,11 +116,12 @@ async function generateCharacterSpec(request: GenerateRequest) {
   return normalizeCharacterSpec(convertGeneratedSpec(parsed));
 }
 
-async function generateImage(prompt: string) {
+async function generateImage(prompt: string, requestSettings?: OpenAIRequestSettings) {
   try {
-    const client = getOpenAIClient();
+    const client = getOpenAIClient(requestSettings);
+    const settings = resolveOpenAISettings(requestSettings);
     const response = await client.images.generate({
-      model: getImageModel(),
+      model: settings.imageModel,
       prompt,
       size: "1024x1536",
       quality: "medium",

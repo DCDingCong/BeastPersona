@@ -11,6 +11,7 @@ import {
   Moon,
   PawPrint,
   RefreshCw,
+  Settings,
   Shield,
   Sparkles,
   UserRound,
@@ -30,6 +31,12 @@ import {
   applyCharacterSpecDraft,
   type CharacterSpecDraftPatch,
 } from "@/lib/characterSpecEditing";
+import {
+  canUseClientGeneration,
+  generateClientImage,
+  generateClientResult,
+} from "@/lib/clientGeneration";
+import type { OpenAIRequestSettings } from "@/lib/openaiSettings";
 import { selectDeepQuestions, type DeepFlowDepth } from "@/lib/questionFlow";
 import {
   getPreviousQuickQuestionIndex,
@@ -40,7 +47,7 @@ import {
 } from "@/lib/questionnaireNavigation";
 import { scoreAnswers, type ScoreSnapshot } from "@/lib/scoring";
 
-type Step = "home" | "quiz" | "deep" | "review" | "lineage" | "loading" | "result";
+type Step = "home" | "settings" | "quiz" | "deep" | "review" | "lineage" | "loading" | "result";
 
 type GenerateResponse = {
   characterSpec?: CharacterSpec;
@@ -55,6 +62,7 @@ type GenerateResponse = {
 };
 
 const questions = quickQuestions;
+const aiSettingsStorageKey = "fursona-atelier.aiSettings.v1";
 
 const lineageOptions: Array<{
   value: LineageMode;
@@ -98,6 +106,17 @@ const defaultDeepConfig: DeepConfig = {
   avoid: "",
 };
 
+function readStoredAiSettings(): OpenAIRequestSettings {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const saved = window.localStorage.getItem(aiSettingsStorageKey);
+    return saved ? (JSON.parse(saved) as OpenAIRequestSettings) : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function Home() {
   const [step, setStep] = useState<Step>("home");
   const [mode, setMode] = useState<"quick" | "deep">("quick");
@@ -114,6 +133,7 @@ export default function Home() {
   const [specDraft, setSpecDraft] = useState<CharacterSpecDraftPatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingIndex, setLoadingIndex] = useState(0);
+  const [aiSettings, setAiSettings] = useState<OpenAIRequestSettings>(readStoredAiSettings);
 
   const activeSpec = result?.characterSpec;
   const completeImage = result?.completeSceneImage || null;
@@ -258,6 +278,7 @@ export default function Home() {
       deepConfig: mode === "deep" ? deepConfig : undefined,
       scoreSnapshot: snapshot,
       confirmedSpec,
+      aiSettings: getActiveAiSettings(),
     };
 
     try {
@@ -269,8 +290,13 @@ export default function Home() {
       const data = (await response.json()) as GenerateResponse;
 
       if (!response.ok) {
-        setError(data.error || "生成失败。");
-        setResult(null);
+        const directData = await tryClientGenerate(payload, response.status);
+        if (directData) {
+          setResult(directData);
+        } else {
+          setError(data.error || "生成失败。");
+          setResult(null);
+        }
       } else {
         if (data.error) {
           setError(data.error);
@@ -278,8 +304,13 @@ export default function Home() {
         setResult(data);
       }
     } catch {
-      setError("网络请求失败，请检查本地服务或稍后重试。");
-      setResult(null);
+      const directData = await tryClientGenerate(payload);
+      if (directData) {
+        setResult(directData);
+      } else {
+        setError("网络请求失败，请检查本地服务或稍后重试。");
+        setResult(null);
+      }
     } finally {
       window.clearInterval(timer);
       setStep("result");
@@ -294,23 +325,49 @@ export default function Home() {
         ? activeSpec.prompts.complete_scene
         : activeSpec.prompts.reference_sheet;
 
-    const response = await fetch("/api/regenerate-image", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
-    });
-    const data = (await response.json()) as { image?: string; error?: string };
+    const settings = getActiveAiSettings();
+    let image: string | undefined;
 
-    if (!response.ok || !data.image) {
-      setError(data.error || "图片重新生成失败。");
+    try {
+      const response = await fetch("/api/regenerate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, aiSettings: settings }),
+      });
+      const data = (await response.json()) as { image?: string; error?: string };
+
+      if (response.ok && data.image) {
+        image = data.image;
+      } else if (!canUseClientGeneration(settings)) {
+        setError(data.error || "图片重新生成失败。");
+        return;
+      }
+    } catch {
+      if (!canUseClientGeneration(settings)) {
+        setError("图片重新生成失败。");
+        return;
+      }
+    }
+
+    if (!image && settings && canUseClientGeneration(settings)) {
+      try {
+        image = await generateClientImage(prompt, settings);
+      } catch {
+        setError("图片重新生成失败。");
+        return;
+      }
+    }
+
+    if (!image) {
+      setError("图片重新生成失败。");
       return;
     }
 
     setResult((current) => ({
       ...(current || {}),
       characterSpec: activeSpec,
-      completeSceneImage: kind === "complete" ? data.image : current?.completeSceneImage,
-      referenceSheetImage: kind === "reference" ? data.image : current?.referenceSheetImage,
+      completeSceneImage: kind === "complete" ? image : current?.completeSceneImage,
+      referenceSheetImage: kind === "reference" ? image : current?.referenceSheetImage,
     }));
   }
 
@@ -353,6 +410,36 @@ export default function Home() {
     }));
   }
 
+  async function tryClientGenerate(payload: GenerateRequest, status?: number) {
+    const settings = payload.aiSettings;
+    if (!settings || !canUseClientGeneration(settings)) return null;
+    if (status && status !== 404 && status !== 405 && status < 500) return null;
+
+    return generateClientResult(payload, settings);
+  }
+
+  function getActiveAiSettings() {
+    const entries = Object.entries(aiSettings)
+      .map(([key, value]) => [key, typeof value === "string" ? value.trim() : ""])
+      .filter(([, value]) => value);
+
+    return entries.length > 0
+      ? (Object.fromEntries(entries) as OpenAIRequestSettings)
+      : undefined;
+  }
+
+  function persistAiSettings() {
+    const settings = getActiveAiSettings();
+
+    if (settings) {
+      window.localStorage.setItem(aiSettingsStorageKey, JSON.stringify(settings));
+    } else {
+      window.localStorage.removeItem(aiSettingsStorageKey);
+    }
+
+    setStep("home");
+  }
+
   return (
     <main className="app-stage">
       <div className="phone-shell">
@@ -363,6 +450,9 @@ export default function Home() {
               <div className="topbar">
                 <Sparkles size={22} color="var(--cyan)" />
                 <span className="hint">兽格造像馆</span>
+                <button className="icon-button" onClick={() => setStep("settings")} aria-label="模型设置">
+                  <Settings size={18} />
+                </button>
               </div>
               <h1 className="brand-title">兽格<br />造像馆</h1>
               <p className="brand-subtitle">
@@ -380,6 +470,73 @@ export default function Home() {
               </div>
             </section>
           </>
+        )}
+
+        {step === "settings" && (
+          <section className="screen screen-scroll">
+            <Header onBack={() => setStep("home")} label="模型设置" />
+            <h2 className="question-title review-title">自定义生成模型</h2>
+            <p className="hint">
+              设置会保存在本机浏览器或 APK 内，用于当前设备上的生成请求；留空则继续使用服务端环境变量。
+            </p>
+            <div className="preview-panel">
+              <div className="form-grid">
+                <Field label="模型 URL">
+                  <input
+                    placeholder="https://api.openai.com/v1"
+                    value={aiSettings.baseURL || ""}
+                    onChange={(event) =>
+                      setAiSettings((current) => ({ ...current, baseURL: event.target.value }))
+                    }
+                  />
+                </Field>
+                <Field label="API Key">
+                  <input
+                    type="password"
+                    placeholder="sk-..."
+                    value={aiSettings.apiKey || ""}
+                    onChange={(event) =>
+                      setAiSettings((current) => ({ ...current, apiKey: event.target.value }))
+                    }
+                  />
+                </Field>
+                <Field label="文本模型名称">
+                  <input
+                    placeholder="gpt-4.1-mini"
+                    value={aiSettings.textModel || ""}
+                    onChange={(event) =>
+                      setAiSettings((current) => ({ ...current, textModel: event.target.value }))
+                    }
+                  />
+                </Field>
+                <Field label="图片模型名称">
+                  <input
+                    placeholder="gpt-image-2"
+                    value={aiSettings.imageModel || ""}
+                    onChange={(event) =>
+                      setAiSettings((current) => ({ ...current, imageModel: event.target.value }))
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+            <div className="action-stack">
+              <button className="primary-action" onClick={persistAiSettings}>
+                <strong>保存并从选择开始</strong>
+                <ChevronRight size={20} />
+              </button>
+              <button
+                className="ghost-action"
+                onClick={() => {
+                  setAiSettings({});
+                  window.localStorage.removeItem(aiSettingsStorageKey);
+                }}
+              >
+                <span>清空本机设置</span>
+                <RefreshCw size={18} />
+              </button>
+            </div>
+          </section>
         )}
 
         {step === "quiz" && (
@@ -715,6 +872,10 @@ export default function Home() {
                   <button className="ghost-action" onClick={generate}>
                     <span>重新生成</span>
                     <RefreshCw size={18} />
+                  </button>
+                  <button className="ghost-action" onClick={() => setStep("home")}>
+                    <span>从选择开始</span>
+                    <ChevronRight size={18} />
                   </button>
                 </div>
               </>

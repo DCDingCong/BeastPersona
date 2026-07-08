@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
-import { getImageModel, getOpenAIClient, hasOpenAIKey } from "@/lib/openai";
+import {
+  getOpenAIClient,
+  hasOpenAIKey,
+  resolveOpenAISettings,
+  type OpenAIRequestSettings,
+} from "@/lib/openai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type RegenerateImageRequest = {
   prompt: string;
+  aiSettings?: OpenAIRequestSettings;
 };
 
 export async function POST(request: Request) {
@@ -21,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "缺少图片描述文本。" }, { status: 400 });
   }
 
-  if (!hasOpenAIKey()) {
+  if (!hasOpenAIKey(body.aiSettings)) {
     return NextResponse.json(
       { error: "缺少生成服务密钥，无法重新生成图片。" },
       { status: 400 },
@@ -29,9 +35,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const client = getOpenAIClient();
+    const client = getOpenAIClient(body.aiSettings);
+    const settings = resolveOpenAISettings(body.aiSettings);
     const response = await client.images.generate({
-      model: getImageModel(),
+      model: settings.imageModel,
       prompt: body.prompt,
       size: "1024x1536",
       quality: "medium",

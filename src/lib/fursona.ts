@@ -1,6 +1,7 @@
 import type { Answer } from "@/data/questionTypes";
 import { scoreTagDefinitions, type ScoreTag } from "@/data/scoreTags";
 import { scoreAnswers, type ScoreSnapshot } from "@/lib/scoring";
+import type { OpenAIRequestSettings } from "@/lib/openaiSettings";
 
 export type LineageMode = "ai" | "pure" | "hybrid";
 export type InputMode = "quick" | "deep";
@@ -28,6 +29,7 @@ export type GenerateRequest = {
   deepConfig?: DeepConfig;
   scoreSnapshot?: ScoreSnapshot;
   confirmedSpec?: CharacterSpec;
+  aiSettings?: OpenAIRequestSettings;
 };
 
 export type CharacterBlueprint = {
