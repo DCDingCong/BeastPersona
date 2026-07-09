@@ -23,3 +23,6 @@ yarn-error.log*
 # Deploy and test output
 .vercel
 coverage
+
+# Local portable toolchains
+.tools
