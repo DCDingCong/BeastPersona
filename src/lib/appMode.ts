@@ -1,10 +1,13 @@
 export type AppMode = "anonymous" | "multi-user";
 
-// The open-source branch is usable without any account setup.
-export const defaultAppMode: AppMode = "anonymous";
+// The deployment branch protects public traffic with local accounts by default.
+export const defaultAppMode: AppMode = "multi-user";
 
 export function getAppMode(): AppMode {
-  return process.env.APP_MODE === "multi-user" ? "multi-user" : defaultAppMode;
+  if (process.env.APP_MODE === "anonymous" || process.env.APP_MODE === "multi-user") {
+    return process.env.APP_MODE;
+  }
+  return defaultAppMode;
 }
 
 export function isMultiUserMode() {
