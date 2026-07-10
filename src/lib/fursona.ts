@@ -127,17 +127,33 @@ const noVisibleTextRule =
   "no visible text, no character name, no labels, no typography, no watermark";
 
 const referenceSheetLayoutRule = [
-  "vertical A4 portrait character reference sheet, clean white and pale gray board",
-  "professional furry character design sheet similar to an art commission reference board",
-  "large full body front view and back view as the main focus, consistent anatomy and outfit",
-  "left biography column with short metadata rows, right 3x3 expression grid with head portraits",
-  "detail close-up panels for eyes, ears, fur pattern, tail, paws, necklace or signature marks",
-  "outfit variation row with home, daily, work, and outing looks",
-  "items panel with accessories and tools, color palette swatches, personal space scene panel",
-  "bottom turnaround strip with front, side, back silhouettes",
-  "thin black divider lines, neat manga concept art layout, readable hierarchy",
-  "only short simple headings and tiny labels if text appears, no long paragraphs, no watermark",
-].join(", ");
+  "竖版 A4 人物设定图，白色与浅灰色的整洁画板",
+  "专业兽设委托参考板风格",
+  "以大型全身正面图和背面图为主体，解剖结构与服装保持一致",
+  "左侧人物资料与中文介绍栏，右侧九宫格头像表情",
+  "眼睛、耳朵、毛发纹理、尾巴、爪部、饰品与特殊标记的细节特写",
+  "居家、日常、工作、外出的服装变化",
+  "配饰与工具、中文色板、个人空间场景",
+  "底部包含正面、侧面、背面的三视图",
+  "使用纤细分隔线和清晰的漫画概念设计层级",
+  "可增加由系统生成的角色背景、身份、生活区域、世界观与经历等设定信息",
+].join("，");
+
+export function withChineseReferenceSheetRules(prompt: string) {
+  const languageRule = [
+    "画面内所有可见标题、标签、注释、介绍和色板名称必须全部使用简体中文",
+    "禁止出现英文、日文、韩文、拼音、拉丁字母及其他非中文介绍",
+    "不显示角色姓名、签名和水印",
+  ].join("，");
+  const normalizedPrompt = prompt.trim();
+  const withLayout = normalizedPrompt.includes("竖版 A4 人物设定图")
+    ? normalizedPrompt
+    : `${normalizedPrompt}，${referenceSheetLayoutRule}`;
+
+  return withLayout.includes("画面内所有可见标题、标签、注释、介绍和色板名称必须全部使用简体中文")
+    ? withLayout
+    : `${withLayout}，${languageRule}`;
+}
 
 const categoryLabels: Record<string, string> = {
   personality: "性格倾向",
@@ -358,16 +374,16 @@ export function buildFallbackCharacterSpec(
     "deep ink background, cyan and amber accents, refined East Asian fantasy cyber style",
     noVisibleTextRule,
   ].join(", ");
-  const referenceSheet = [
-    `${blueprint.primarySpecies}${lineageLabel} furry character design reference sheet`,
-    `${blueprint.worldStyle}${blueprint.role}, ${blueprint.mission}`,
-    `${blueprint.bodyType}, height ${blueprint.height}`,
-    `personality keywords: ${blueprint.personalityKeywords.join(", ")}`,
-    `visual keywords: ${blueprint.visualKeywords.join(", ")}`,
-    `color palette: ${Object.values(blueprint.colors).join(", ")}`,
-    blueprint.traitMapping.join(", "),
-    referenceSheetLayoutRule,
-  ].join(", ");
+  const referenceSheet = withChineseReferenceSheetRules([
+    `${blueprint.primarySpecies}${lineageLabel}兽设人物设定图`,
+    `世界观与身份：${blueprint.worldStyle}${blueprint.role}`,
+    `人物任务：${blueprint.mission}`,
+    `体型与身高：${blueprint.bodyType}，${blueprint.height}`,
+    `性格关键词：${blueprint.personalityKeywords.join("、")}`,
+    `视觉关键词：${blueprint.visualKeywords.join("、")}`,
+    `配色：${Object.values(blueprint.colors).join("、")}`,
+    blueprint.traitMapping.join("、"),
+  ].join("，"));
   const settingDescription = [
     `${blueprint.primarySpecies}${lineageLabel}兽设，定位为${positioning}。`,
     `核心性格是${blueprint.personalityKeywords.join("、")}。`,

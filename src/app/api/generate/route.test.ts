@@ -111,9 +111,10 @@ describe("generate route", () => {
       "utf8",
     );
 
-    expect(generationSource).toContain("vertical A4 portrait character reference sheet");
-    expect(generationSource).toContain("right 3x3 expression grid");
-    expect(generationSource).toContain("large full body front and back views");
-    expect(generationSource).toContain("short headings only");
+    expect(generationSource).toContain("竖版 A4 角色设定板");
+    expect(generationSource).toContain("右侧九宫格表情");
+    expect(generationSource).toContain("必须全部使用简体中文");
+    expect(generationSource).toContain("禁止出现英文");
+    expect(generationSource).toContain("角色背景、身份、生活区域、世界观和经历");
   });
 });

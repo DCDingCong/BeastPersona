@@ -682,7 +682,7 @@ export default function Home() {
             <section className="screen screen-scroll home-screen">
               <div className="topbar">
                 <div className="home-brand-mark">
-                  <Sparkles size={20} />
+                  <span className="home-brand-icon"><Sparkles size={18} /></span>
                   <span>兽格造像馆</span>
                 </div>
                 <div className="topbar-actions">
@@ -694,26 +694,36 @@ export default function Home() {
                   )}
                 </div>
               </div>
-              <h1 className="brand-title">兽格<br />造像馆</h1>
-              <p className="brand-subtitle">
-                输入你的性格、审美和幻想偏好，生成完整形象图、多维度设定图和设定说明。
-              </p>
+              <div className="home-hero">
+                <div className="home-hero-copy">
+                  <h1 className="brand-title">兽格<br />造像馆</h1>
+                  <div className="home-hero-divider" aria-hidden="true" />
+                  <p className="brand-subtitle">
+                    输入你的性格、审美和幻想偏好，生成完整形象图、多维度设定图和设定说明。
+                  </p>
+                </div>
+              </div>
               <div className="action-stack">
                 <button className="primary-action" onClick={startQuick}>
-                  <strong>30秒算兽设</strong>
-                  <ChevronRight size={20} />
+                  <span className="action-main">
+                    <span className="action-icon"><PawPrint size={23} /></span>
+                    <strong>30秒算兽设</strong>
+                  </span>
+                  <ChevronRight className="action-chevron" size={21} />
                 </button>
                 <button className="secondary-action" onClick={startDeep}>
-                  <strong>深度定制</strong>
-                  <ChevronRight size={20} />
+                  <span className="action-main">
+                    <span className="action-icon"><Layers3 size={22} /></span>
+                    <strong>深度定制</strong>
+                  </span>
+                  <ChevronRight className="action-chevron" size={21} />
                 </button>
               </div>
-              <JobHistoryList
-                anonymous={isAnonymousMode}
+              <GenerationHistoryList
                 jobs={accountJobs}
+                results={accountResults}
                 onOpenGenerationJob={openGenerationJob}
               />
-              <ResultHistoryList results={accountResults} onOpenGenerationJob={openGenerationJob} />
             </section>
           </>
         )}
@@ -1256,71 +1266,65 @@ function AccountPill({
   );
 }
 
-function ResultHistoryList({
+function GenerationHistoryList({
+  jobs,
   results,
   onOpenGenerationJob,
 }: {
+  jobs: UserJobSummary[];
   results: UserResultSummary[];
   onOpenGenerationJob: (jobId: string) => void;
 }) {
-  const recentResults = results.slice(0, 4);
+  const resultsByJobId = new Map(results.map((result) => [result.jobId, result]));
+  const knownJobIds = new Set(jobs.map((job) => job.id));
+  const historyItems = [
+    ...jobs.map((job) => ({
+      id: job.id,
+      jobId: job.id,
+      title: resultsByJobId.get(job.id)?.title || (job.kind === "regenerate-image" ? "图片重绘" : "完整生成"),
+      createdAt: job.createdAt || job.updatedAt || "",
+      job,
+    })),
+    ...results
+      .filter((result) => !knownJobIds.has(result.jobId))
+      .map((result) => ({
+        id: result.id,
+        jobId: result.jobId,
+        title: result.title,
+        createdAt: result.createdAt,
+        job: null,
+      })),
+  ]
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, 6);
 
-  if (recentResults.length === 0) return null;
-
-  return (
-    <div className="history-panel">
-      <div className="section-title">
-        <span>我的作品</span>
-        <small>已保存</small>
-      </div>
-      <div className="history-list">
-        {recentResults.map((item) => (
-          <button
-            className="history-row"
-            key={item.id}
-            onClick={() => onOpenGenerationJob(item.jobId)}
-          >
-            <span>{item.title}</span>
-            <strong>查看</strong>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function JobHistoryList({
-  anonymous,
-  jobs,
-  onOpenGenerationJob,
-}: {
-  anonymous: boolean;
-  jobs: UserJobSummary[];
-  onOpenGenerationJob: (jobId: string) => void;
-}) {
-  const recentJobs = jobs.slice(0, 4);
-
-  if (recentJobs.length === 0) return null;
+  if (historyItems.length === 0) return null;
 
   return (
     <div className="history-panel">
       <div className="section-title">
-        <span>最近任务</span>
-        <small>{anonymous ? "本机历史" : "仅当前用户可见"}</small>
+        <span>我的任务</span>
       </div>
       <div className="history-list">
-        {recentJobs.map((job) => {
-          const canOpen = job.kind === "generate" && job.status === "succeeded";
+        {historyItems.map((item) => {
+          const canOpen = !item.job || (item.job.kind !== "regenerate-image" && item.job.status === "succeeded");
 
           return (
             <button
               className="history-row"
+              data-status={item.job?.status || "succeeded"}
               disabled={!canOpen}
-              key={job.id}
-              onClick={() => onOpenGenerationJob(job.id)}
+              key={item.id}
+              onClick={() => onOpenGenerationJob(item.jobId)}
             >
-              <span>{job.kind === "regenerate-image" ? "图片重绘" : "完整生成"}</span>
-              <strong>{formatJobStatus(job)}</strong>
+              <span className="history-row-main">
+                <span className="history-row-icon"><Layers3 size={16} /></span>
+                <span>{item.title}</span>
+              </span>
+              <span className="history-row-meta">
+                <strong>{item.job ? formatJobStatus(item.job) : "查看结果"}</strong>
+                {canOpen && <ChevronRight size={17} aria-hidden="true" />}
+              </span>
             </button>
           );
         })}
