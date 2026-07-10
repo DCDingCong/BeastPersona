@@ -4,7 +4,10 @@ export type AppMode = "anonymous" | "multi-user";
 export const defaultAppMode: AppMode = "anonymous";
 
 export function getAppMode(): AppMode {
-  return process.env.APP_MODE === "multi-user" ? "multi-user" : defaultAppMode;
+  if (process.env.APP_MODE === "anonymous" || process.env.APP_MODE === "multi-user") {
+    return process.env.APP_MODE;
+  }
+  return defaultAppMode;
 }
 
 export function isMultiUserMode() {
