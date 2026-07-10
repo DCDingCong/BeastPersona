@@ -355,8 +355,9 @@ describe("buildCharacterGenerationPreview", () => {
     expect(preview.tagGroups.flatMap((group) => group.tags).some((tag) => tag.label === "熊")).toBe(true);
     expect(preview.characterSpec.prompts.complete_scene).toContain("no visible text");
     expect(preview.characterSpec.prompts.reference_sheet).toContain(preview.characterSpec.primary_species);
-    expect(preview.characterSpec.prompts.reference_sheet).toContain("vertical A4 portrait");
-    expect(preview.characterSpec.prompts.reference_sheet).toContain("3x3 expression grid");
+    expect(preview.characterSpec.prompts.reference_sheet).toContain("竖版 A4 人物设定图");
+    expect(preview.characterSpec.prompts.reference_sheet).toContain("九宫格头像表情");
+    expect(preview.characterSpec.prompts.reference_sheet).toContain("必须全部使用简体中文");
   });
 });
 
@@ -378,7 +379,9 @@ describe("buildFallbackCharacterSpec", () => {
     expect(spec.prompts.complete_scene).toContain("no visible text");
     expect(spec.prompts.complete_scene).toContain("no character name");
     expect(spec.prompts.reference_sheet).toContain(spec.primary_species);
-    expect(spec.prompts.reference_sheet).toContain("outfit variation row");
-    expect(spec.prompts.reference_sheet).toContain("color palette swatches");
+    expect(spec.prompts.reference_sheet).toContain("服装变化");
+    expect(spec.prompts.reference_sheet).toContain("中文色板");
+    expect(spec.prompts.reference_sheet).toContain("角色背景、身份、生活区域、世界观与经历");
+    expect(spec.prompts.reference_sheet).toContain("禁止出现英文");
   });
 });

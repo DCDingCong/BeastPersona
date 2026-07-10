@@ -1,4 +1,8 @@
-import type { CharacterSpec, GenerateRequest } from "@/lib/fursona";
+import {
+  type CharacterSpec,
+  type GenerateRequest,
+  withChineseReferenceSheetRules,
+} from "@/lib/fursona";
 import {
   defaultImageModel,
   sanitizeOpenAISettings,
@@ -88,7 +92,15 @@ export async function generateClientResult(
     throw new Error("Android/browser direct generation requires a confirmed character spec.");
   }
 
-  const characterSpec = payload.confirmedSpec;
+  const characterSpec = {
+    ...payload.confirmedSpec,
+    prompts: {
+      ...payload.confirmedSpec.prompts,
+      reference_sheet: withChineseReferenceSheetRules(
+        payload.confirmedSpec.prompts.reference_sheet,
+      ),
+    },
+  };
   const [completeSceneImage, referenceSheetImage] = await Promise.all([
     generateClientImage(characterSpec.prompts.complete_scene, settings).catch(() => null),
     generateClientImage(characterSpec.prompts.reference_sheet, settings).catch(() => null),

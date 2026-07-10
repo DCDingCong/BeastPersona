@@ -16,6 +16,7 @@ import {
   regenerateImage,
   type GenerateResponse,
 } from "./serverGeneration";
+import { withChineseReferenceSheetRules } from "./fursona";
 
 let workerRunning = false;
 
@@ -143,5 +144,7 @@ async function uploadAndRecordAsset(
 }
 
 function getPromptForImageKind(prompts: GenerateResponse["prompts"], imageKind: ImageKind) {
-  return imageKind === "complete_scene" ? prompts.complete_scene : prompts.reference_sheet;
+  return imageKind === "complete_scene"
+    ? prompts.complete_scene
+    : withChineseReferenceSheetRules(prompts.reference_sheet);
 }

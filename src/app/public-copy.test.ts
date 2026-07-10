@@ -70,4 +70,14 @@ describe("public-facing copy", () => {
     expect(pageCopy).toContain("完整形象图");
     expect(pageCopy).toContain("还没有账户？");
   });
+
+  it("merges generation history into one task list without a privacy label", () => {
+    const pageCopy = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+
+    expect(pageCopy).toContain("我的任务");
+    expect(pageCopy).not.toContain("最近任务");
+    expect(pageCopy).not.toContain("我的作品");
+    expect(pageCopy).not.toContain("仅当前用户可见");
+    expect(pageCopy).not.toContain("仅用户可见");
+  });
 });

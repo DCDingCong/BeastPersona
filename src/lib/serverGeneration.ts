@@ -2,6 +2,7 @@ import {
   inferCharacterBlueprint,
   type CharacterSpec,
   type GenerateRequest,
+  withChineseReferenceSheetRules,
 } from "@/lib/fursona";
 import {
   getOpenAIClient,
@@ -117,8 +118,9 @@ async function generateCharacterSpec(request: GenerateRequest) {
       "根据 score_snapshot 的标签生成角色故事、人物设定集，再用人物设定集和世界背景组织完整形象图 prompt。",
       "mission、signature_item、must_keep、avoid 只作内部生成约束，不要写进 setting_description。",
       "complete_scene prompt 必须包含英文约束：no visible text, no character name, no labels, no typography, no watermark。",
-      "reference_sheet prompt 必须是竖版 A4 角色设定板：左侧资料栏，中间主视图和背视图，右侧 3x3 表情格，下方细节特写、服装变化、随身物品、色板、个人空间、三视图和信息块。",
-      "reference_sheet 可以允许短标题和短标签，但不要要求长段落、角色名、签名或水印；文字应是辅助层级，不要压过角色图。",
+      "reference_sheet prompt 必须使用中文编写，并要求生成竖版 A4 角色设定板：左侧资料与中文介绍栏，中间主视图和背视图，右侧九宫格表情，下方细节特写、服装变化、随身物品、中文色板、个人空间、三视图和信息块。",
+      "reference_sheet 内所有可见标题、标签、注释、介绍和色板名称必须全部使用简体中文，禁止出现英文、日文、韩文、拼音、拉丁字母及其他非中文介绍。",
+      "reference_sheet 可以增加由系统生成的角色背景、身份、生活区域、世界观和经历等中文设定信息，但不要出现角色名、签名或水印；文字应是辅助层级，不要压过角色图。",
       "avatar prompt 不要要求图片内出现角色名、标题、签名或文字标签。",
       "输出要适合生成完整形象图、多维度设定图和给画师看的设定说明。",
     ].join("\n"),
@@ -189,7 +191,7 @@ function normalizeCharacterSpec(spec: CharacterSpec) {
     prompts: {
       ...spec.prompts,
       complete_scene: withImageTextRule(spec.prompts.complete_scene),
-      reference_sheet: withReferenceSheetLayoutRule(spec.prompts.reference_sheet),
+      reference_sheet: withChineseReferenceSheetRules(spec.prompts.reference_sheet),
       avatar: withImageTextRule(spec.prompts.avatar),
     },
   };
@@ -218,25 +220,4 @@ function normalizeCharacterSpec(spec: CharacterSpec) {
 function withImageTextRule(prompt: string) {
   const rule = "no visible text, no character name, no labels, no typography, no watermark";
   return prompt.includes(rule) ? prompt : `${prompt}, ${rule}`;
-}
-
-function withReferenceSheetLayoutRule(prompt: string) {
-  const layoutRule = [
-    "vertical A4 portrait character reference sheet",
-    "large full body front and back views",
-    "left biography column",
-    "right 3x3 expression grid",
-    "detail close-up panels",
-    "outfit variation row",
-    "items panel",
-    "color palette swatches",
-    "personal space scene panel",
-    "bottom turnaround strip",
-    "thin divider lines",
-    "short headings only, no long paragraphs, no watermark",
-  ].join(", ");
-
-  return prompt.includes("vertical A4 portrait character reference sheet")
-    ? prompt
-    : `${prompt}, ${layoutRule}`;
 }
