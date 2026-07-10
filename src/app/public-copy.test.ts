@@ -31,6 +31,12 @@ const bannedPublicCopy = [
   "demoSpec",
   "sample-complete-scene.png",
   "sample-reference-sheet.png",
+  "Supabase 尚未配置",
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_SECRET_KEY",
+  ".env.local",
+  "环境变量",
 ];
 
 describe("public-facing copy", () => {
@@ -54,5 +60,14 @@ describe("public-facing copy", () => {
     expect(pageCopy).not.toContain('<Stat label="任务"');
     expect(pageCopy).not.toContain('<Stat label="道具"');
     expect(pageCopy).not.toContain('<div className="result-title">{activeSpec.name}</div>');
+  });
+
+  it("presents the product before asking users to authenticate", () => {
+    const pageCopy = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+
+    expect(pageCopy).toContain("兽格造像馆");
+    expect(pageCopy).toContain("输入你的性格、审美和幻想偏好");
+    expect(pageCopy).toContain("完整形象图");
+    expect(pageCopy).toContain("还没有账户？");
   });
 });

@@ -8,15 +8,18 @@ import {
   Clipboard,
   Download,
   Flame,
+  ImageIcon,
+  Layers3,
+  LockKeyhole,
+  Mail,
   Moon,
   PawPrint,
   RefreshCw,
-  Settings,
   Shield,
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { quickQuestions } from "@/data/quickQuestions";
 import { deepQuestionBank } from "@/data/deepQuestionBank";
 import type { Answer, Question } from "@/data/questionTypes";
@@ -31,12 +34,6 @@ import {
   applyCharacterSpecDraft,
   type CharacterSpecDraftPatch,
 } from "@/lib/characterSpecEditing";
-import {
-  canUseClientGeneration,
-  generateClientImage,
-  generateClientResult,
-} from "@/lib/clientGeneration";
-import type { OpenAIRequestSettings } from "@/lib/openaiSettings";
 import { selectDeepQuestions, type DeepFlowDepth } from "@/lib/questionFlow";
 import {
   getPreviousQuickQuestionIndex,
@@ -47,7 +44,7 @@ import {
 } from "@/lib/questionnaireNavigation";
 import { scoreAnswers, type ScoreSnapshot } from "@/lib/scoring";
 
-type Step = "home" | "settings" | "quiz" | "deep" | "review" | "lineage" | "loading" | "result";
+type Step = "home" | "quiz" | "deep" | "review" | "lineage" | "loading" | "result";
 
 type GenerateResponse = {
   characterSpec?: CharacterSpec;
@@ -61,8 +58,68 @@ type GenerateResponse = {
   };
 };
 
+type StartJobResponse = {
+  jobId?: string;
+  status?: "queued" | "running" | "succeeded" | "failed";
+  queuePosition?: number | null;
+  credits?: number;
+  error?: string;
+};
+
+type JobStatusResponse<T> = {
+  status?: "queued" | "running" | "succeeded" | "failed";
+  resultId?: string;
+  queuePosition?: number | null;
+  result?: T;
+  error?: string;
+};
+
+type ImageJobResult = {
+  image?: string;
+};
+
+type AccountSummary = {
+  id: string;
+  email?: string | null;
+  credits: number;
+  anonymous: boolean;
+};
+
+type UserJobSummary = {
+  id: string;
+  kind?: "generate" | "regenerate-image";
+  status: "queued" | "running" | "succeeded" | "failed";
+  cost?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  queuePosition?: number | null;
+  error?: string;
+};
+
+type UserResultSummary = {
+  id: string;
+  jobId: string;
+  title: string;
+  createdAt: string;
+  assets?: {
+    completeSceneUrl?: string;
+    referenceSheetUrl?: string;
+  };
+};
+
+type MeResponse = {
+  user?: {
+    id: string;
+    email?: string | null;
+    anonymous?: boolean;
+  };
+  mode?: "anonymous" | "multi-user";
+  credits?: number;
+  jobs?: UserJobSummary[];
+  results?: UserResultSummary[];
+};
+
 const questions = quickQuestions;
-const aiSettingsStorageKey = "fursona-atelier.aiSettings.v1";
 
 const lineageOptions: Array<{
   value: LineageMode;
@@ -106,14 +163,15 @@ const defaultDeepConfig: DeepConfig = {
   avoid: "",
 };
 
-function readStoredAiSettings(): OpenAIRequestSettings {
-  if (typeof window === "undefined") return {};
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
+async function readJson<T>(response: Response): Promise<T> {
   try {
-    const saved = window.localStorage.getItem(aiSettingsStorageKey);
-    return saved ? (JSON.parse(saved) as OpenAIRequestSettings) : {};
+    return (await response.json()) as T;
   } catch {
-    return {};
+    return {} as T;
   }
 }
 
@@ -133,9 +191,20 @@ export default function Home() {
   const [specDraft, setSpecDraft] = useState<CharacterSpecDraftPatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingIndex, setLoadingIndex] = useState(0);
-  const [aiSettings, setAiSettings] = useState<OpenAIRequestSettings>(readStoredAiSettings);
+  const [account, setAccount] = useState<AccountSummary | null>(null);
+  const [accountJobs, setAccountJobs] = useState<UserJobSummary[]>([]);
+  const [accountResults, setAccountResults] = useState<UserResultSummary[]>([]);
+  const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [accountLoaded, setAccountLoaded] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
+  const [currentResultId, setCurrentResultId] = useState<string | null>(null);
 
   const activeSpec = result?.characterSpec;
+  const isAnonymousMode = account?.anonymous === true;
   const completeImage = result?.completeSceneImage || null;
   const referenceImage = result?.referenceSheetImage || null;
   const generationPreview = useMemo(() => {
@@ -162,6 +231,80 @@ export default function Home() {
     (currentDeepQuestionId
       ? deepQuestionBank.find((question) => question.id === currentDeepQuestionId)
       : undefined) || remainingDeepQuestions[0];
+
+  useEffect(() => {
+    void refreshAccount();
+  }, []);
+
+  async function refreshAccount() {
+    try {
+      const response = await fetch("/api/me", { cache: "no-store" });
+      const data = await readJson<MeResponse>(response);
+
+      if (response.ok) {
+        setAccount(
+          data.user
+            ? {
+                id: data.user.id,
+                email: data.user.email,
+                credits: data.credits || 0,
+                anonymous: data.user.anonymous === true,
+              }
+            : null,
+        );
+        setAccountJobs(data.jobs || []);
+        setAccountResults(data.results || []);
+      } else if (response.status === 401) {
+        setAccount(null);
+        setAccountJobs([]);
+        setAccountResults([]);
+      }
+    } catch {
+      setAccount(null);
+    } finally {
+      setAccountLoaded(true);
+    }
+  }
+
+  async function submitAuth() {
+    setAuthLoading(true);
+    setAuthMessage(null);
+
+    try {
+      const response = await fetch(`/api/auth/${authMode === "login" ? "login" : "signup"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail.trim(), password: authPassword }),
+      });
+      const data = await readJson<{ error?: string }>(response);
+      if (!response.ok) {
+        setAuthMessage(data.error || "账户服务暂时不可用，请稍后再试。");
+        return;
+      }
+
+      setAuthMessage(null);
+      await refreshAccount();
+    } catch {
+      setAuthMessage("服务暂时不可用，请稍后再试。");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function signOut() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      setAccount(null);
+      setAccountJobs([]);
+      setAccountResults([]);
+      setAuthPassword("");
+      setAuthMode("login");
+      setAuthMessage(null);
+      setCurrentResultId(null);
+      setStep("home");
+    }
+  }
 
   function startQuick() {
     setMode("quick");
@@ -259,6 +402,54 @@ export default function Home() {
     setStep("deep");
   }
 
+  async function generateWithJob() {
+    setError(null);
+    setResult(null);
+    setLoadingIndex(0);
+    setQueuePosition(null);
+    setCurrentResultId(null);
+    setStep("loading");
+    const timer = window.setInterval(() => {
+      setLoadingIndex((current) => Math.min(current + 1, loadingSteps.length - 1));
+    }, 900);
+
+    const activeAnswers = mode === "quick" ? answers : deepAnswers;
+    const snapshot = generationPreview.scoreSnapshot || scoreAnswers(activeAnswers);
+    const confirmedSpec = step === "review" ? reviewSpec : generationPreview.characterSpec;
+    const payload: GenerateRequest = {
+      mode,
+      lineageMode,
+      answers: activeAnswers,
+      deepConfig: mode === "deep" ? deepConfig : undefined,
+      scoreSnapshot: snapshot,
+      confirmedSpec,
+    };
+
+    try {
+      const data = await startAndPollJob<GenerateResponse>(
+        "/api/generate/jobs",
+        "/api/generate/jobs",
+        payload,
+      );
+      if (data.error) {
+        setError(data.error);
+      }
+      setResult(data);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "网络请求失败，请检查本地服务或稍后重试。",
+      );
+      setResult(null);
+    } finally {
+      window.clearInterval(timer);
+      await refreshAccount();
+      setStep("result");
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function generate() {
     setError(null);
     setResult(null);
@@ -278,7 +469,6 @@ export default function Home() {
       deepConfig: mode === "deep" ? deepConfig : undefined,
       scoreSnapshot: snapshot,
       confirmedSpec,
-      aiSettings: getActiveAiSettings(),
     };
 
     try {
@@ -290,13 +480,8 @@ export default function Home() {
       const data = (await response.json()) as GenerateResponse;
 
       if (!response.ok) {
-        const directData = await tryClientGenerate(payload, response.status);
-        if (directData) {
-          setResult(directData);
-        } else {
-          setError(data.error || "生成失败。");
-          setResult(null);
-        }
+        setError(data.error || "生成失败。");
+        setResult(null);
       } else {
         if (data.error) {
           setError(data.error);
@@ -304,58 +489,34 @@ export default function Home() {
         setResult(data);
       }
     } catch {
-      const directData = await tryClientGenerate(payload);
-      if (directData) {
-        setResult(directData);
-      } else {
-        setError("网络请求失败，请检查本地服务或稍后重试。");
-        setResult(null);
-      }
+      setError("网络请求失败，请检查本地服务或稍后重试。");
+      setResult(null);
     } finally {
       window.clearInterval(timer);
       setStep("result");
     }
   }
 
-  async function retryImage(kind: "complete" | "reference") {
-    if (!activeSpec) return;
+  async function retryImageWithJob(kind: "complete" | "reference") {
+    if (!activeSpec || !currentResultId) return;
 
-    const prompt =
-      kind === "complete"
-        ? activeSpec.prompts.complete_scene
-        : activeSpec.prompts.reference_sheet;
-
-    const settings = getActiveAiSettings();
     let image: string | undefined;
+    setError(null);
 
     try {
-      const response = await fetch("/api/regenerate-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, aiSettings: settings }),
-      });
-      const data = (await response.json()) as { image?: string; error?: string };
-
-      if (response.ok && data.image) {
-        image = data.image;
-      } else if (!canUseClientGeneration(settings)) {
-        setError(data.error || "图片重新生成失败。");
-        return;
-      }
-    } catch {
-      if (!canUseClientGeneration(settings)) {
-        setError("图片重新生成失败。");
-        return;
-      }
-    }
-
-    if (!image && settings && canUseClientGeneration(settings)) {
-      try {
-        image = await generateClientImage(prompt, settings);
-      } catch {
-        setError("图片重新生成失败。");
-        return;
-      }
+      const result = await startAndPollJob<ImageJobResult>(
+        "/api/regenerate-image/jobs",
+        "/api/regenerate-image/jobs",
+        {
+          resultId: currentResultId,
+          imageKind: kind === "complete" ? "complete_scene" : "reference_sheet",
+        },
+      );
+      image = result.image;
+      await refreshAccount();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "图片重新生成失败。");
+      return;
     }
 
     if (!image) {
@@ -369,6 +530,27 @@ export default function Home() {
       completeSceneImage: kind === "complete" ? image : current?.completeSceneImage,
       referenceSheetImage: kind === "reference" ? image : current?.referenceSheetImage,
     }));
+  }
+
+  async function openGenerationJob(jobId: string) {
+    setError(null);
+    setQueuePosition(null);
+    setStep("loading");
+
+    try {
+      const data = await pollExistingJob<GenerateResponse>("/api/generate/jobs", jobId);
+      if (data.error) {
+        setError(data.error);
+      }
+      setResult(data);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error ? requestError.message : "生成任务查询失败。",
+      );
+    } finally {
+      await refreshAccount();
+      setStep("result");
+    }
   }
 
   function downloadImage(src: string, filename: string) {
@@ -410,49 +592,107 @@ export default function Home() {
     }));
   }
 
-  async function tryClientGenerate(payload: GenerateRequest, status?: number) {
-    const settings = payload.aiSettings;
-    if (!settings || !canUseClientGeneration(settings)) return null;
-    if (status && status !== 404 && status !== 405 && status < 500) return null;
+  async function startAndPollJob<T>(
+    startUrl: string,
+    statusBaseUrl: string,
+    body: unknown,
+  ): Promise<T> {
+    const startResponse = await fetch(startUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const startData = await readJson<StartJobResponse>(startResponse);
 
-    return generateClientResult(payload, settings);
-  }
-
-  function getActiveAiSettings() {
-    const entries = Object.entries(aiSettings)
-      .map(([key, value]) => [key, typeof value === "string" ? value.trim() : ""])
-      .filter(([, value]) => value);
-
-    return entries.length > 0
-      ? (Object.fromEntries(entries) as OpenAIRequestSettings)
-      : undefined;
-  }
-
-  function persistAiSettings() {
-    const settings = getActiveAiSettings();
-
-    if (settings) {
-      window.localStorage.setItem(aiSettingsStorageKey, JSON.stringify(settings));
-    } else {
-      window.localStorage.removeItem(aiSettingsStorageKey);
+    if (!startResponse.ok || !startData.jobId) {
+      throw new Error(startData.error || `生成任务启动失败：${startResponse.status}`);
     }
 
-    setStep("home");
+    if (typeof startData.credits === "number") {
+      setAccount((current) =>
+        current ? { ...current, credits: startData.credits || 0 } : current,
+      );
+    }
+    setQueuePosition(startData.queuePosition ?? null);
+
+    return pollExistingJob<T>(statusBaseUrl, startData.jobId);
+  }
+
+  async function pollExistingJob<T>(statusBaseUrl: string, jobId: string): Promise<T> {
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      await delay(attempt === 0 ? 800 : 2000);
+
+      const statusResponse = await fetch(
+        `${statusBaseUrl}/${encodeURIComponent(jobId)}`,
+        { cache: "no-store" },
+      );
+      const statusData = await readJson<JobStatusResponse<T>>(statusResponse);
+
+      if (!statusResponse.ok) {
+        throw new Error(statusData.error || `生成任务查询失败：${statusResponse.status}`);
+      }
+
+      setQueuePosition(statusData.queuePosition ?? null);
+      if (statusData.resultId) {
+        setCurrentResultId(statusData.resultId);
+      }
+
+      if (statusData.status === "succeeded" && statusData.result) {
+        return statusData.result;
+      }
+
+      if (statusData.status === "failed") {
+        throw new Error(statusData.error || "生成任务失败。");
+      }
+    }
+
+    throw new Error("生成仍在进行中，请稍后重试。");
   }
 
   return (
     <main className="app-stage">
       <div className="phone-shell">
-        {step === "home" && (
+        {!accountLoaded && (
+          <section className="screen loading-screen">
+            <div className="loading-panel">
+              <Sparkles size={30} color="var(--cyan)" />
+              <h2 className="question-title" style={{ marginTop: 18 }}>正在读取账户</h2>
+              <p className="hint">请稍候。</p>
+            </div>
+          </section>
+        )}
+
+        {accountLoaded && !account && (
+          <AuthScreen
+            email={authEmail}
+            password={authPassword}
+            mode={authMode}
+            loading={authLoading}
+            message={authMessage}
+            onEmailChange={setAuthEmail}
+            onPasswordChange={setAuthPassword}
+            onModeChange={setAuthMode}
+            onSubmit={submitAuth}
+          />
+        )}
+
+        {account && step === "home" && (
           <>
             <div className="hero-bg" />
-            <section className="screen">
+            <section className="screen screen-scroll home-screen">
               <div className="topbar">
-                <Sparkles size={22} color="var(--cyan)" />
-                <span className="hint">兽格造像馆</span>
-                <button className="icon-button" onClick={() => setStep("settings")} aria-label="模型设置">
-                  <Settings size={18} />
-                </button>
+                <div className="home-brand-mark">
+                  <Sparkles size={20} />
+                  <span>兽格造像馆</span>
+                </div>
+                <div className="topbar-actions">
+                  {!isAnonymousMode && (
+                    <>
+                      <AccountPill account={account} onRefresh={refreshAccount} />
+                      <button className="text-button" onClick={signOut}>退出</button>
+                    </>
+                  )}
+                </div>
               </div>
               <h1 className="brand-title">兽格<br />造像馆</h1>
               <p className="brand-subtitle">
@@ -468,78 +708,17 @@ export default function Home() {
                   <ChevronRight size={20} />
                 </button>
               </div>
+              <JobHistoryList
+                anonymous={isAnonymousMode}
+                jobs={accountJobs}
+                onOpenGenerationJob={openGenerationJob}
+              />
+              <ResultHistoryList results={accountResults} onOpenGenerationJob={openGenerationJob} />
             </section>
           </>
         )}
 
-        {step === "settings" && (
-          <section className="screen screen-scroll">
-            <Header onBack={() => setStep("home")} label="模型设置" />
-            <h2 className="question-title review-title">自定义生成模型</h2>
-            <p className="hint">
-              设置会保存在本机浏览器或 APK 内，用于当前设备上的生成请求；留空则继续使用服务端环境变量。
-            </p>
-            <div className="preview-panel">
-              <div className="form-grid">
-                <Field label="模型 URL">
-                  <input
-                    placeholder="https://api.openai.com/v1"
-                    value={aiSettings.baseURL || ""}
-                    onChange={(event) =>
-                      setAiSettings((current) => ({ ...current, baseURL: event.target.value }))
-                    }
-                  />
-                </Field>
-                <Field label="API Key">
-                  <input
-                    type="password"
-                    placeholder="sk-..."
-                    value={aiSettings.apiKey || ""}
-                    onChange={(event) =>
-                      setAiSettings((current) => ({ ...current, apiKey: event.target.value }))
-                    }
-                  />
-                </Field>
-                <Field label="文本模型名称">
-                  <input
-                    placeholder="gpt-4.1-mini"
-                    value={aiSettings.textModel || ""}
-                    onChange={(event) =>
-                      setAiSettings((current) => ({ ...current, textModel: event.target.value }))
-                    }
-                  />
-                </Field>
-                <Field label="图片模型名称">
-                  <input
-                    placeholder="gpt-image-2"
-                    value={aiSettings.imageModel || ""}
-                    onChange={(event) =>
-                      setAiSettings((current) => ({ ...current, imageModel: event.target.value }))
-                    }
-                  />
-                </Field>
-              </div>
-            </div>
-            <div className="action-stack">
-              <button className="primary-action" onClick={persistAiSettings}>
-                <strong>保存并从选择开始</strong>
-                <ChevronRight size={20} />
-              </button>
-              <button
-                className="ghost-action"
-                onClick={() => {
-                  setAiSettings({});
-                  window.localStorage.removeItem(aiSettingsStorageKey);
-                }}
-              >
-                <span>清空本机设置</span>
-                <RefreshCw size={18} />
-              </button>
-            </div>
-          </section>
-        )}
-
-        {step === "quiz" && (
+        {account && step === "quiz" && (
           <QuestionScreen
             label={`${questionIndex + 1} / ${questions.length}`}
             question={questions[questionIndex]}
@@ -551,8 +730,8 @@ export default function Home() {
           />
         )}
 
-        {step === "deep" && activeDeepQuestion && (
-          <section className="screen screen-scroll">
+        {account && step === "deep" && activeDeepQuestion && (
+          <section className="screen screen-scroll flow-screen">
             <Header onBack={backFromDeepQuestion} label={`深度 ${deepAnswers.length + 1}`} />
             <div className="lineage-grid compact-grid">
               {depthOptions.map((item) => (
@@ -616,8 +795,8 @@ export default function Home() {
           </section>
         )}
 
-        {step === "review" && (
-          <section className="screen screen-scroll">
+        {account && step === "review" && (
+          <section className="screen screen-scroll review-screen">
             <Header onBack={backFromReview} label="生成确认" />
             <h2 className="question-title review-title">确认提示词与标签</h2>
             <p className="hint">以下内容会作为本次生成的中文设定依据；确认后将直接使用这些提示词生成完整形象图和多维度设定图。</p>
@@ -715,16 +894,17 @@ export default function Home() {
             </div>
 
             <div className="action-stack">
-              <button className="primary-action" onClick={generate}>
+              <button className="primary-action" onClick={generateWithJob}>
                 <strong>确认并开始生成</strong>
+                {!isAnonymousMode && <span>消耗 1 积分</span>}
                 <Sparkles size={20} />
               </button>
             </div>
           </section>
         )}
 
-        {step === "lineage" && (
-          <section className="screen">
+        {account && step === "lineage" && (
+          <section className="screen flow-screen">
             <Header onBack={() => setStep("review")} label="血统模式" />
             <h2 className="question-title">选择你的血统推演方式</h2>
             <p className="hint">系统建议：{scoreSnapshot?.lineageRecommendation === "pure" ? "纯血" : "混血"}。你也可以手动覆盖。</p>
@@ -744,20 +924,25 @@ export default function Home() {
               ))}
             </div>
             <div className="action-stack">
-              <button className="primary-action" onClick={generate}>
+              <button className="primary-action" onClick={generateWithJob}>
                 <strong>开始推演</strong>
+                {!isAnonymousMode && <span>消耗 1 积分</span>}
                 <Sparkles size={20} />
               </button>
             </div>
           </section>
         )}
 
-        {step === "loading" && (
-          <section className="screen">
+        {account && step === "loading" && (
+          <section className="screen loading-screen">
             <div className="loading-panel">
               <Sparkles size={30} color="var(--cyan)" />
               <h2 className="question-title" style={{ marginTop: 18 }}>正在推演你的兽设</h2>
-              <p className="hint">系统会一次性生成完整形象图、多维度设定图和设定说明。</p>
+              <p className="hint">
+                {queuePosition
+                  ? `当前排队第 ${queuePosition} 位，完成后会自动进入结果页。`
+                  : "系统会一次性生成完整形象图、多维度设定图和设定说明。"}
+              </p>
               <div className="loading-list">
                 {loadingSteps.map((item, index) => (
                   <div className="loading-row" key={item}>
@@ -770,8 +955,8 @@ export default function Home() {
           </section>
         )}
 
-        {step === "result" && (
-          <section className="screen screen-scroll">
+        {account && step === "result" && (
+          <section className="screen screen-scroll result-screen">
             <Header onBack={() => setStep("home")} label="推演结果" />
             {error && <div className="error-box">{error}</div>}
             {activeSpec ? (
@@ -785,23 +970,30 @@ export default function Home() {
                   <span>{activeSpec.lineage_mode === "pure" ? "纯血" : "混血"}</span>
                 </div>
 
-                {completeImage && (
-                  <div className="result-hero result-section">
-                    <img src={completeImage} alt="完整形象图" />
+                <div className="result-section">
+                  <div className="section-title">
+                    <span>完整形象图</span>
+                    <button
+                      className="icon-button"
+                      aria-label="重新生成完整形象图"
+                      title="重新生成"
+                      onClick={() => retryImageWithJob("complete")}
+                    >
+                      <RefreshCw size={17} />
+                    </button>
                   </div>
-                )}
-                <div className="section-title">
-                  <span>完整形象图</span>
-                  <button className="icon-button" onClick={() => retryImage("complete")}>
-                    <RefreshCw size={17} />
-                  </button>
+                  {completeImage && (
+                    <div className="result-hero">
+                      <img src={completeImage} alt="完整形象图" />
+                    </div>
+                  )}
                 </div>
 
                 <div className="result-section">
                   <div className="section-title">
                     <span>多维度设定图</span>
                     <div className="button-row">
-                      <button className="icon-button" onClick={() => retryImage("reference")}>
+                      <button className="icon-button" onClick={() => retryImageWithJob("reference")}>
                         <RefreshCw size={17} />
                       </button>
                       {referenceImage && (
@@ -869,8 +1061,8 @@ export default function Home() {
                       <Download size={19} />
                     </button>
                   )}
-                  <button className="ghost-action" onClick={generate}>
-                    <span>重新生成</span>
+                  <button className="ghost-action" onClick={generateWithJob}>
+                    <span>{isAnonymousMode ? "重新生成" : "重新生成 · 消耗 1 积分"}</span>
                     <RefreshCw size={18} />
                   </button>
                   <button className="ghost-action" onClick={() => setStep("home")}>
@@ -912,7 +1104,7 @@ function QuestionScreen({
   onChoose: (optionId: string) => void;
 }) {
   return (
-    <section className="screen">
+    <section className="screen quiz-screen">
       <Header onBack={onBack} label={label} />
       <div className="progress">
         <span style={{ width: `${progress}%` }} />
@@ -937,6 +1129,214 @@ function QuestionScreen({
       </div>
     </section>
   );
+}
+
+function AuthScreen({
+  email,
+  password,
+  mode,
+  loading,
+  message,
+  onEmailChange,
+  onPasswordChange,
+  onModeChange,
+  onSubmit,
+}: {
+  email: string;
+  password: string;
+  mode: "login" | "signup";
+  loading: boolean;
+  message: string | null;
+  onEmailChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onModeChange: (mode: "login" | "signup") => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <>
+      <div className="hero-bg auth-hero-bg">
+        <img src="/auth-atelier-bg.png" alt="" />
+      </div>
+      <section className="screen screen-scroll auth-screen">
+        <div className="auth-topbar">
+          <div className="auth-brand-mark">
+            <Sparkles size={28} />
+            <span>兽格造像馆</span>
+          </div>
+          <div className="auth-account-pill">
+            <UserRound size={18} />
+            <span>账户</span>
+          </div>
+        </div>
+        <h1 className="brand-title auth-title">兽格造像馆</h1>
+        <div className="auth-divider" aria-hidden="true" />
+        <p className="brand-subtitle">
+          输入你的性格、审美和幻想偏好，生成完整形象图、多维度设定图和设定说明。登录后作品会保存到你的个人历史中。
+        </p>
+        <div className="auth-feature-grid" aria-label="平台能力">
+          <div className="auth-feature-card">
+            <span className="auth-feature-icon"><ImageIcon size={17} /></span>
+            <strong>完整形象图</strong>
+          </div>
+          <div className="auth-feature-card">
+            <span className="auth-feature-icon"><Layers3 size={17} /></span>
+            <strong>多维设定图</strong>
+          </div>
+          <div className="auth-feature-card">
+            <span className="auth-feature-icon auth-feature-icon-warm"><Clipboard size={17} /></span>
+            <strong>历史作品保存</strong>
+          </div>
+        </div>
+        <div className="auth-panel">
+          <div className="auth-panel-heading">
+            <span className="auth-heading-icon"><LockKeyhole size={19} /></span>
+            <strong>{mode === "login" ? "登录账户" : "创建账户"}</strong>
+          </div>
+          <div className="auth-form-grid">
+            <label className="auth-field">
+              <span><Mail size={18} /></span>
+              <input
+                aria-label="邮箱"
+                autoComplete="email"
+                inputMode="email"
+                placeholder="邮箱地址"
+                value={email}
+                onChange={(event) => onEmailChange(event.target.value)}
+              />
+            </label>
+            <label className="auth-field">
+              <span><LockKeyhole size={18} /></span>
+              <input
+                aria-label="密码"
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                placeholder={mode === "signup" ? "密码（至少 8 位）" : "密码"}
+                type="password"
+                value={password}
+                onChange={(event) => onPasswordChange(event.target.value)}
+              />
+            </label>
+          </div>
+          {message && <div className="error-box">{message}</div>}
+          <button
+            className="primary-action auth-submit"
+            disabled={loading || !email.trim() || password.length < 8}
+            onClick={onSubmit}
+            type="button"
+          >
+            <strong>{mode === "login" ? "登录" : "创建账户"}</strong>
+            <ChevronRight size={20} />
+          </button>
+          <div className="auth-switch">
+            <span>{mode === "login" ? "还没有账户？" : "已有账户？"}</span>
+            <button
+              onClick={() => onModeChange(mode === "login" ? "signup" : "login")}
+              type="button"
+            >
+              {mode === "login" ? "注册" : "登录"}
+            </button>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function AccountPill({
+  account,
+  onRefresh,
+}: {
+  account: AccountSummary | null;
+  onRefresh: () => void;
+}) {
+  return (
+    <button className="credit-pill" onClick={onRefresh} aria-label="刷新积分">
+      <Sparkles size={14} />
+      <span>{account ? `${account.credits} 积分` : "积分"}</span>
+    </button>
+  );
+}
+
+function ResultHistoryList({
+  results,
+  onOpenGenerationJob,
+}: {
+  results: UserResultSummary[];
+  onOpenGenerationJob: (jobId: string) => void;
+}) {
+  const recentResults = results.slice(0, 4);
+
+  if (recentResults.length === 0) return null;
+
+  return (
+    <div className="history-panel">
+      <div className="section-title">
+        <span>我的作品</span>
+        <small>已保存</small>
+      </div>
+      <div className="history-list">
+        {recentResults.map((item) => (
+          <button
+            className="history-row"
+            key={item.id}
+            onClick={() => onOpenGenerationJob(item.jobId)}
+          >
+            <span>{item.title}</span>
+            <strong>查看</strong>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function JobHistoryList({
+  anonymous,
+  jobs,
+  onOpenGenerationJob,
+}: {
+  anonymous: boolean;
+  jobs: UserJobSummary[];
+  onOpenGenerationJob: (jobId: string) => void;
+}) {
+  const recentJobs = jobs.slice(0, 4);
+
+  if (recentJobs.length === 0) return null;
+
+  return (
+    <div className="history-panel">
+      <div className="section-title">
+        <span>最近任务</span>
+        <small>{anonymous ? "本机历史" : "仅当前用户可见"}</small>
+      </div>
+      <div className="history-list">
+        {recentJobs.map((job) => {
+          const canOpen = job.kind === "generate" && job.status === "succeeded";
+
+          return (
+            <button
+              className="history-row"
+              disabled={!canOpen}
+              key={job.id}
+              onClick={() => onOpenGenerationJob(job.id)}
+            >
+              <span>{job.kind === "regenerate-image" ? "图片重绘" : "完整生成"}</span>
+              <strong>{formatJobStatus(job)}</strong>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function formatJobStatus(job: UserJobSummary) {
+  if (job.status === "queued") {
+    return job.queuePosition ? `排队第 ${job.queuePosition} 位` : "排队中";
+  }
+
+  if (job.status === "running") return "生成中";
+  if (job.status === "succeeded") return job.kind === "generate" ? "查看结果" : "已完成";
+  return job.error || "失败";
 }
 
 function Header({ onBack, label }: { onBack: () => void; label: string }) {

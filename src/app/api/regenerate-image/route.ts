@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
+import type { OpenAIRequestSettings } from "@/lib/openai";
 import {
-  getOpenAIClient,
-  hasOpenAIKey,
-  resolveOpenAISettings,
-  type OpenAIRequestSettings,
-} from "@/lib/openai";
+  assertValidRegenerateImageRequest,
+  GenerationRequestError,
+} from "@/lib/serverGeneration";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -23,42 +22,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求体不是有效 JSON。" }, { status: 400 });
   }
 
-  if (!body.prompt?.trim()) {
-    return NextResponse.json({ error: "缺少图片描述文本。" }, { status: 400 });
-  }
-
-  if (!hasOpenAIKey(body.aiSettings)) {
-    return NextResponse.json(
-      { error: "缺少生成服务密钥，无法重新生成图片。" },
-      { status: 400 },
-    );
-  }
-
   try {
-    const client = getOpenAIClient(body.aiSettings);
-    const settings = resolveOpenAISettings(body.aiSettings);
-    const response = await client.images.generate({
-      model: settings.imageModel,
-      prompt: body.prompt,
-      size: "1024x1536",
-      quality: "medium",
-      output_format: "png",
-      n: 1,
-    });
-    const image = response.data?.[0];
-    const src = image?.b64_json
-      ? `data:image/png;base64,${image.b64_json}`
-      : image?.url || null;
+    assertValidRegenerateImageRequest(body.prompt, body.aiSettings);
 
-    if (!src) {
-      return NextResponse.json({ error: "图片模型没有返回图片。" }, { status: 502 });
-    }
-
-    return NextResponse.json({ image: src });
+    return NextResponse.json(
+      { error: "公网图片生成已切换为异步队列，请使用 /api/regenerate-image/jobs。" },
+      { status: 409 },
+    );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "图片重新生成失败。" },
-      { status: 502 },
+      {
+        error: error instanceof Error ? error.message : "图片重新生成失败。",
+      },
+      { status: error instanceof GenerationRequestError ? error.status : 502 },
     );
   }
 }

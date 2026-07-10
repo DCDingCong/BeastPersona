@@ -18,7 +18,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue" />
 </p>
 
-**Version:** V1.0.0<br>
+**Version:** V1.2.0<br>
 **Author:** DingC<br>
 **License:** [MIT](./LICENSE)
 
@@ -32,6 +32,9 @@ Fursona Atelier is a mobile-first AI fursona design tool. Users answer a subtle 
 - **Local rule engine**: creates a `scoreSnapshot`, species candidates, lineage recommendation, and conflict hints before AI generation.
 - **Lineage control**: supports `AI recommended`, `pure`, and `hybrid` generation modes to reduce random trait mixing.
 - **Editable confirmation step**: before generation, users can edit positioning, height, body type, keywords, visual details, and image prompts. Edits are applied to the current generation.
+- **Two runtime modes**: the open-source branch works without accounts, while the deployment branch enables local email/password accounts, credits, and private history.
+- **Local persistence**: SQLite stores users, credits, jobs, and character specs; generated images stay in a private local data directory.
+- **Asynchronous queue**: concurrent requests are processed in database order, failed jobs are refunded, and expired leases can be recovered.
 - **Two consistent image outputs**: the complete scene and reference sheet are derived from the same structured spec to reduce character drift.
 - **Board-style reference sheet**: the reference output is guided toward a vertical character sheet with front/back views, expression grid, detail close-ups, outfit variations, items, palette, personal-space scene, and turnaround strip.
 - **Result actions**: save images, copy setting text, and retry a single image.
@@ -53,7 +56,8 @@ Fixed Q12 or deep branching question bank
 -> Generate or confirm character_spec_json
 -> Two image prompts are derived from the same JSON
 -> OpenAI image model generates complete scene and reference sheet in parallel
--> Result page receives character spec, complete image, and reference image
+-> SQLite stores the job and character spec; images are stored privately on disk
+-> Result and history views load the character spec and both images
 ```
 
 ## Tech Stack
@@ -63,6 +67,7 @@ Fixed Q12 or deep branching question bank
 - TypeScript
 - Tailwind CSS
 - OpenAI SDK
+- Node.js SQLite
 - Vitest
 - ESLint
 
@@ -70,9 +75,11 @@ Fixed Q12 or deep branching question bank
 
 ```text
 src/app/page.tsx                         Mobile UI and interaction flow
-src/app/api/generate/route.ts            AI generation endpoint
+src/app/api/auth/                         Local signup, login, and logout
+src/app/api/generate/jobs/                Asynchronous generation jobs
+src/app/api/assets/                       Authenticated image delivery
 src/app/api/generate/schema.ts           Structured character-spec JSON Schema
-src/app/api/regenerate-image/route.ts    Single-image retry endpoint
+src/app/api/regenerate-image/jobs/       Single-image redraw jobs
 src/data/quickQuestions.ts               Fixed 12-question quick bank
 src/data/deepQuestionBank.ts             Local deep branching question bank
 src/data/species.ts                      Species mapping and weights
@@ -83,6 +90,10 @@ src/lib/conflicts.ts                     Setting conflict detection
 src/lib/characterSpecEditing.ts          Confirmation-page draft merge logic
 src/lib/fursona.ts                       Fursona rule inference and fallback spec
 src/lib/openai.ts                        OpenAI SDK configuration
+src/lib/localDatabase.ts                 SQLite schema and transactions
+src/lib/localAuth.ts                     Password hashing and database sessions
+src/lib/asyncJobs.ts                     Credit reservation and queue leases
+src/lib/generationStorage.ts             Private local image storage
 public/                                  Static images for GitHub and frontend use
 assets/                                  Product visual references
 docs/                                    PRD, question-bank, and implementation docs
@@ -103,11 +114,14 @@ OPENAI_API_KEY=sk-your-api-key-here
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_TEXT_MODEL=gpt-4.1-mini
 OPENAI_IMAGE_MODEL=gpt-image-2
+APP_MODE=anonymous
+LOCAL_DATA_DIR=./data
+INITIAL_USER_CREDITS=3
 ```
 
 `.env.local.example` contains GitHub-safe placeholder values only. The real `.env.local` file is ignored by `.gitignore`; do not commit your real key, custom base URL, or any secret.
 
-Install dependencies and start the dev server:
+Node.js 22.13 or newer is required; Node.js 24 is recommended. Install dependencies and start the dev server:
 
 ```powershell
 npm.cmd install
@@ -138,15 +152,31 @@ npm.cmd run preview
 | `npm.cmd test` | Run Vitest |
 | `npm.cmd run lint` | Run ESLint |
 
+## Runtime Modes and Branches
+
+- `main` defaults to `APP_MODE=anonymous`: no login or credits are shown, and history belongs to the local shared workspace.
+- `codex/public-deployment` defaults to `APP_MODE=multi-user`: local email/password accounts, initial credits, generation charges, and user-owned history are enabled.
+- `APP_MODE` can override the branch default. Multi-user mode does not require an external database service.
+
+SQLite, sessions, and generated images are stored in `data/` by default. This directory is ignored by Git and should be backed up as a unit. When exposing the app through a tunnel, use HTTPS.
+
 ## API
 
-### `POST /api/generate`
+### `POST /api/auth/signup` / `login` / `logout`
 
-Generates the structured character spec, complete scene, and reference sheet. The frontend can pass an edited `confirmedSpec` from the confirmation page, and the backend will generate images from that spec directly. If `OPENAI_API_KEY` is missing, the endpoint returns a clear error instead of fake demo data.
+Local authentication for multi-user mode. Passwords are hashed with `scrypt`; browsers receive only an HttpOnly session cookie.
 
-### `POST /api/regenerate-image`
+### `POST /api/generate/jobs`
 
-Receives an existing prompt and redraws one image without regenerating the character spec.
+Creates an asynchronous generation job. Anonymous mode does not charge credits; multi-user mode reserves one credit transactionally and refunds it on failure.
+
+### `GET /api/generate/jobs/[jobId]`
+
+Returns queue position, job state, and the completed result. Multi-user mode enforces owner access.
+
+### `POST /api/regenerate-image/jobs`
+
+Creates a redraw job using prompts loaded from the saved result instead of trusting browser-provided history data.
 
 ## Rule Summary
 
@@ -160,8 +190,8 @@ Receives an existing prompt and redraws one image without regenerating the chara
 
 ## Not Included Yet
 
-- Result persistence / history
 - Community feed
+- Email verification and password recovery
 - Multi-character relationship graph
 - Fine-grained post-generation editing (pre-generation editing is supported on the confirmation page)
 - Inpainting / partial redraw
@@ -171,7 +201,8 @@ Receives an existing prompt and redraws one image without regenerating the chara
 ## Notes
 
 - Do not commit `.env.local`, API keys, or any secrets.
+- The `data/` directory contains accounts, sessions, credits, and generated images. Never expose it as a static directory.
 - If you use an OpenAI-compatible provider, make sure it supports both the Responses API and Images API.
 - Image generation cost, latency, and final quality depend on the selected model and provider. `gpt-image-2` is recommended.
 - Image quality variance, unstable details, or style drift are usually limitations of the image model rather than local rule inference errors.
-- V1.0.0 focuses on the quick generation flow. The fine-grained question bank will continue to evolve in later versions.
+- V1.2.0 targets a single-machine Next.js deployment. Do not share one SQLite file between multiple servers.

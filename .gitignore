@@ -24,5 +24,9 @@ yarn-error.log*
 .vercel
 coverage
 
+# Local database, sessions, generated assets, and transient browser output
+data/
+.playwright-mcp/
+
 # Local portable toolchains
 .tools

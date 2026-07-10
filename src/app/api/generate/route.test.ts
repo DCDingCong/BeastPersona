@@ -57,6 +57,24 @@ describe("generate route", () => {
     expect(payload.referenceSheetImage).toBeUndefined();
   });
 
+  it("requires public generation requests to use the async queue", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "quick",
+          lineageMode: "ai",
+          answers: [],
+          aiSettings: { apiKey: "test-key" },
+        }),
+      }),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(payload.error).toContain("/api/generate/jobs");
+  });
+
   it("uses only strict structured-output object schemas", () => {
     expect(characterSpecSchema).toBeDefined();
     expect(findDynamicObjectSchemas(characterSpecSchema)).toEqual([]);
@@ -77,19 +95,25 @@ describe("generate route", () => {
 
     expect(source).toBeDefined();
 
-    const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
+    const generationSource = readFileSync(
+      new URL("../../../lib/serverGeneration.ts", import.meta.url),
+      "utf8",
+    );
 
-    expect(routeSource).toContain("no visible text");
-    expect(routeSource).toContain("no character name");
-    expect(routeSource).toContain("no labels");
+    expect(generationSource).toContain("no visible text");
+    expect(generationSource).toContain("no character name");
+    expect(generationSource).toContain("no labels");
   });
 
   it("guides reference sheets toward structured character boards", () => {
-    const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
+    const generationSource = readFileSync(
+      new URL("../../../lib/serverGeneration.ts", import.meta.url),
+      "utf8",
+    );
 
-    expect(routeSource).toContain("竖版 A4 角色设定板");
-    expect(routeSource).toContain("3x3 表情格");
-    expect(routeSource).toContain("vertical A4 portrait character reference sheet");
-    expect(routeSource).toContain("short headings only");
+    expect(generationSource).toContain("vertical A4 portrait character reference sheet");
+    expect(generationSource).toContain("right 3x3 expression grid");
+    expect(generationSource).toContain("large full body front and back views");
+    expect(generationSource).toContain("short headings only");
   });
 });
