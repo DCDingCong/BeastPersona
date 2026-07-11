@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { GenerateResponse } from "./serverGeneration";
+import { normalizeCharacterSpec, type GenerateResponse } from "./serverGeneration";
 import type { GenerationJobRow, ImageKind, JobKind, JobStatus } from "./asyncJobs";
 import { createAssetUrls, type StoredAsset } from "./generationStorage";
 import { getDatabase, withImmediateTransaction } from "./localDatabase";
@@ -62,7 +62,7 @@ export function listUserResults(userId: string) {
   const assets = listAssetsForResults(rows.map((row) => row.id));
 
   return rows.map((row) => {
-    const characterSpec = parseJson<GenerateResponse["characterSpec"]>(row.character_spec_json);
+    const characterSpec = normalizeCharacterSpec(parseJson<GenerateResponse["characterSpec"]>(row.character_spec_json));
     return {
       id: row.id,
       jobId: row.job_id,
@@ -71,6 +71,18 @@ export function listUserResults(userId: string) {
       assets: createAssetUrls(assets.get(row.id) || []),
     };
   });
+}
+
+export function listRecentCharacterSpecsForUser(userId: string, limit = 10) {
+  const rows = getDatabase().prepare(`
+    SELECT character_spec_json
+    FROM generation_results
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(userId, Math.max(1, Math.min(limit, 20))) as Array<{ character_spec_json: string }>;
+
+  return rows.map((row) => normalizeCharacterSpec(parseJson<GenerateResponse["characterSpec"]>(row.character_spec_json)));
 }
 
 export function getGenerationJobForUser(userId: string, jobId: string) {
@@ -90,7 +102,7 @@ export function getResultResponseForUser(userId: string, resultId: string) {
   const assets = listAssetsForResults([resultId]);
   const urls = createAssetUrls(assets.get(resultId) || []);
   return {
-    characterSpec: parseJson<GenerateResponse["characterSpec"]>(row.character_spec_json),
+    characterSpec: normalizeCharacterSpec(parseJson<GenerateResponse["characterSpec"]>(row.character_spec_json)),
     completeSceneImage: urls.completeSceneUrl || null,
     referenceSheetImage: urls.referenceSheetUrl || null,
     settingDescription: row.setting_description,
@@ -112,7 +124,7 @@ export function getResultForWorker(userId: string, resultId: string) {
 
   return {
     id: row.id,
-    characterSpec: parseJson<GenerateResponse["characterSpec"]>(row.character_spec_json),
+    characterSpec: normalizeCharacterSpec(parseJson<GenerateResponse["characterSpec"]>(row.character_spec_json)),
     settingDescription: row.setting_description,
     prompts: parseJson<GenerateResponse["prompts"]>(row.prompts_json),
   };

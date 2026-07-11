@@ -59,6 +59,18 @@ describe("async jobs", () => {
     expect(getGenerationQueuePosition(second.jobId)).toBe(1);
   });
 
+  it("leases long-running image jobs long enough to avoid duplicate generation", () => {
+    const job = createQueuedGenerationJob({
+      userId: "local-workspace", kind: "generate", cost: 0, input: { mode: "quick" },
+    });
+    claimNextGenerationJob();
+
+    const row = getDatabase().prepare(
+      "SELECT lease_until FROM generation_jobs WHERE id = ?",
+    ).get(job.jobId) as { lease_until: string };
+    expect(new Date(row.lease_until).getTime() - Date.now()).toBeGreaterThan(14 * 60 * 1000);
+  });
+
   it("refunds a failed paid job only once", () => {
     ensureCreditAccount("user-a");
     const job = createQueuedGenerationJob({

@@ -27,18 +27,33 @@ vi.mock("@/lib/userAccounts", async (importOriginal) => {
 });
 
 import { AuthRequiredError } from "@/lib/userSession";
+import { buildCharacterGenerationPreview } from "@/lib/fursona";
 import { POST } from "./route";
 
 const validBody = {
   mode: "quick",
   lineageMode: "ai",
   answers: [],
+  confirmedSpec: buildCharacterGenerationPreview({ mode: "quick", lineageMode: "pure", answers: [] }).characterSpec,
   aiSettings: { apiKey: "test-key" },
 };
 
 describe("generate jobs route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("rejects image jobs before a character spec is confirmed", async () => {
+    mocks.requireAuthenticatedUser.mockResolvedValue({ id: "user-a", email: "a@example.com", anonymous: false });
+    const unconfirmedBody = Object.fromEntries(
+      Object.entries(validBody).filter(([key]) => key !== "confirmedSpec"),
+    );
+    const response = await POST(new Request("http://localhost/api/generate/jobs", {
+      method: "POST",
+      body: JSON.stringify(unconfirmedBody),
+    }));
+    expect(response.status).toBe(400);
+    expect(mocks.createQueuedGenerationJob).not.toHaveBeenCalled();
   });
 
   it("returns 401 when the user is not logged in", async () => {

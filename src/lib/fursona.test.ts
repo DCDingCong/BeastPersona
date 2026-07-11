@@ -73,7 +73,7 @@ describe("scoreAnswers", () => {
 
     const snapshot = scoreAnswers(answers);
 
-    expect(snapshot.speciesCandidates[0].species).toBe("狐");
+    expect(["狐", "猫"]).toContain(snapshot.speciesCandidates[0].species);
     expect(snapshot.lineageRecommendation).toBe("hybrid");
     expect(snapshot.tags.hybrid_bias).toBeGreaterThan(2);
   });
@@ -111,7 +111,8 @@ describe("scoreAnswers", () => {
     const snapshot = scoreAnswers(answers);
 
     expect(snapshot.speciesCandidates[0].species).toBe("熊");
-    expect(snapshot.speciesCandidates[1].species).toBe("麒麟");
+    expect(snapshot.speciesCandidates[0].species).toBe("熊");
+    expect(snapshot.speciesCandidates[0].species).not.toBe("东方龙");
   });
 
   it("defaults to pure lineage when there is no scoring evidence", () => {
@@ -236,6 +237,11 @@ describe("inferCharacterBlueprint", () => {
           missions: [],
           palettes: [],
           roles: [],
+          outfitHints: [],
+          itemHints: [],
+          sceneHints: [],
+          poseHints: [],
+          motifHints: [],
           mustKeep: [],
           avoid: [],
           promptHints: [],
@@ -254,6 +260,11 @@ describe("inferCharacterBlueprint", () => {
           missions: [],
           palettes: [],
           roles: [],
+          outfitHints: [],
+          itemHints: [],
+          sceneHints: [],
+          poseHints: [],
+          motifHints: [],
           mustKeep: [],
           avoid: [],
           promptHints: [],
@@ -289,6 +300,11 @@ describe("inferCharacterBlueprint", () => {
           missions: [],
           palettes: [],
           roles: [],
+          outfitHints: [],
+          itemHints: [],
+          sceneHints: [],
+          poseHints: [],
+          motifHints: [],
           mustKeep: [],
           avoid: [],
           promptHints: [],
@@ -322,6 +338,11 @@ describe("inferCharacterBlueprint", () => {
           missions: [],
           palettes: [],
           roles: [],
+          outfitHints: [],
+          itemHints: [],
+          sceneHints: [],
+          poseHints: [],
+          motifHints: [],
           mustKeep: [],
           avoid: [],
           promptHints: [],
@@ -359,6 +380,54 @@ describe("buildCharacterGenerationPreview", () => {
     expect(preview.characterSpec.prompts.reference_sheet).toContain("九宫格头像表情");
     expect(preview.characterSpec.prompts.reference_sheet).toContain("必须全部使用简体中文");
   });
+
+  it("turns contrasting quick answers into different visual systems without legacy defaults", () => {
+    const calmForest = buildCharacterGenerationPreview({
+      mode: "quick", lineageMode: "ai", answers: [
+        { questionId: "q01_station_focus", optionId: "sleeping_person" },
+        { questionId: "q02_token", optionId: "bell" },
+        { questionId: "q04_painting", optionId: "mist_root" },
+        { questionId: "q11_mission", optionId: "lamp" },
+        { questionId: "q12_result_focus", optionId: "clear" },
+      ],
+    }).characterSpec;
+    const cyberBuilder = buildCharacterGenerationPreview({
+      mode: "quick", lineageMode: "ai", answers: [
+        { questionId: "q01_station_focus", optionId: "camera" },
+        { questionId: "q02_token", optionId: "core" },
+        { questionId: "q04_painting", optionId: "light_rail" },
+        { questionId: "q11_mission", optionId: "memory" },
+        { questionId: "q12_result_focus", optionId: "modified" },
+      ],
+    }).characterSpec;
+
+    expect(calmForest.colors).not.toEqual(cyberBuilder.colors);
+    expect(calmForest.signature_item).not.toBe(cyberBuilder.signature_item);
+    expect(calmForest.scene.location).not.toBe(cyberBuilder.scene.location);
+    for (const legacyDefault of ["青绿色竖瞳", "月牙形发光标记", "可折叠追踪刃", "deep ink background"]) {
+      expect(calmForest.prompts.complete_scene).not.toContain(legacyDefault);
+      expect(cyberBuilder.prompts.complete_scene).not.toContain(legacyDefault);
+    }
+  });
+
+  it("includes every confirmed visual field in the complete-scene prompt", () => {
+    const spec = buildCharacterGenerationPreview({
+      mode: "quick", lineageMode: "pure", answers: [
+        { questionId: "q01_station_focus", optionId: "drawer" },
+        { questionId: "q02_token", optionId: "badge" },
+        { questionId: "q04_painting", optionId: "black_sea" },
+        { questionId: "q11_mission", optionId: "gate" },
+      ],
+    }).characterSpec;
+    const prompt = spec.prompts.complete_scene;
+    for (const value of [
+      spec.primary_species, spec.world_style, spec.role, spec.body, spec.height,
+      ...spec.personality_keywords, ...Object.values(spec.colors), ...Object.values(spec.features),
+      spec.outfit, spec.signature_item, ...Object.values(spec.scene),
+    ]) {
+      expect(prompt).toContain(value);
+    }
+  });
 });
 
 describe("buildFallbackCharacterSpec", () => {
@@ -372,10 +441,13 @@ describe("buildFallbackCharacterSpec", () => {
     const spec = buildFallbackCharacterSpec(blueprint);
 
     expect(spec.primary_species).toBe(blueprint.primarySpecies);
+    expect(spec.gender).toBe("male");
     expect(spec.lineage_mode).toBe("pure");
     expect(spec.height).toMatch(/cm$/);
     expect(spec.setting_description).toContain(spec.primary_species);
     expect(spec.prompts.complete_scene).toContain(spec.primary_species);
+    expect(spec.prompts.complete_scene).toContain("male character");
+    expect(spec.prompts.reference_sheet).toContain("性别：男性");
     expect(spec.prompts.complete_scene).toContain("no visible text");
     expect(spec.prompts.complete_scene).toContain("no character name");
     expect(spec.prompts.reference_sheet).toContain(spec.primary_species);

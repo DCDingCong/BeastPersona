@@ -4,10 +4,13 @@ import { applyCharacterSpecDraft, splitDraftList } from "./characterSpecEditing"
 
 const baseSpec: CharacterSpec = {
   name: "",
+  gender: "male",
   lineage_mode: "pure",
   primary_species: "狐",
   secondary_species: [],
   species_ratio: { 狐: 100 },
+  world_style: "遗迹",
+  role: "调查员",
   positioning: "遗迹斥候",
   personality_keywords: ["警觉", "敏锐"],
   visual_keywords: ["狐耳", "狐尾"],
@@ -32,6 +35,13 @@ const baseSpec: CharacterSpec = {
   background_story: "来自边境地带的斥候。",
   mission: "追踪边境线索",
   catchphrase: "别跟太近，我会分心。",
+  scene: {
+    location: "遗迹档案室",
+    action: "整理线索",
+    composition: "竖版全身构图",
+    camera: "平视三分之二视角",
+    lighting: "柔和侧光",
+  },
   must_keep: ["狐耳"],
   avoid: ["不要混入其他物种的显著特征"],
   prompts: {
@@ -54,7 +64,8 @@ describe("character spec editing", () => {
 
   it("applies editable fields without mutating the original spec", () => {
     const updated = applyCharacterSpecDraft(baseSpec, {
-      positioning: "雪境记录员",
+      world_style: "雪境",
+      role: "记录员",
       personality_keywords: "安静\n谨慎、专注",
       visual_keywords: "冰蓝眼睛\n厚实围巾",
       setting_description: "偏生活化的雪豹设定。",
@@ -68,39 +79,41 @@ describe("character spec editing", () => {
     });
 
     expect(updated).not.toBe(baseSpec);
-    expect(updated.positioning).toBe("雪境记录员");
+    expect(updated.positioning).toBe("雪境 · 记录员");
     expect(updated.personality_keywords).toEqual(["安静", "谨慎", "专注"]);
     expect(updated.visual_keywords).toEqual(["冰蓝眼睛", "厚实围巾"]);
     expect(updated.features.eyes).toBe("冰蓝色眼睛");
     expect(updated.features.tail).toBe("粗尾巴，尾尖浅蓝");
     expect(updated.features.ears).toBe(baseSpec.features.ears);
     expect(updated.prompts.reference_sheet).toBe("vertical A4 reference board");
-    expect(updated.prompts.complete_scene).toContain(baseSpec.prompts.complete_scene);
-    expect(updated.prompts.complete_scene).toContain("雪境记录员");
+    expect(updated.prompts.complete_scene).toContain("世界观：雪境");
+    expect(updated.prompts.complete_scene).toContain("身份：记录员");
     expect(baseSpec.positioning).toBe("遗迹斥候");
   });
 
   it("adds edited requirements to image prompts when prompt fields are not manually edited", () => {
     const updated = applyCharacterSpecDraft(baseSpec, {
-      positioning: "雪境记录员",
+      world_style: "雪境",
+      role: "记录员",
       personality_keywords: "安静\n谨慎",
       visual_keywords: "蓝色耳机\n雪豹斑纹",
     });
 
-    expect(updated.prompts.complete_scene).toContain("User edited requirements");
-    expect(updated.prompts.complete_scene).toContain("雪境记录员");
+    expect(updated.prompts.complete_scene).toContain("世界观：雪境");
+    expect(updated.prompts.complete_scene).toContain("身份：记录员");
     expect(updated.prompts.reference_sheet).toContain("蓝色耳机");
     expect(updated.prompts.reference_sheet).toContain("雪豹斑纹");
   });
 
   it("adds an edit supplement to setting copy when setting copy is not manually edited", () => {
     const updated = applyCharacterSpecDraft(baseSpec, {
-      positioning: "雪境记录员",
+      world_style: "雪境",
+      role: "记录员",
       personality_keywords: "安静\n谨慎",
     });
 
     expect(updated.setting_description).toContain("编辑补充");
-    expect(updated.setting_description).toContain("雪境记录员");
+    expect(updated.setting_description).toContain("雪境 · 记录员");
     expect(updated.setting_description).toContain("安静");
   });
 });

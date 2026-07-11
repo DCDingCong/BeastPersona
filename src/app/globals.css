@@ -510,6 +510,21 @@ select:focus-visible {
   gap: 14px;
 }
 
+.review-adjustments > summary {
+  color: var(--text);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.review-adjustments[open] > summary {
+  margin-bottom: 14px;
+}
+
+.review-adjustments .text-button {
+  justify-self: start;
+}
+
 .edit-panel .form-grid {
   margin-top: 0;
 }
@@ -550,6 +565,28 @@ select:focus-visible {
   display: grid;
   gap: 14px;
   margin-top: 24px;
+}
+
+.loading-notice {
+  display: grid;
+  gap: 5px;
+  margin-top: 18px;
+  border: 1px solid rgba(216, 182, 106, 0.34);
+  border-radius: 12px;
+  background: rgba(216, 182, 106, 0.08);
+  padding: 12px 14px;
+}
+
+.loading-notice strong {
+  color: var(--gold);
+  font-size: 14px;
+}
+
+.loading-notice span,
+.loading-notice small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .loading-row {
@@ -1226,6 +1263,24 @@ select:focus-visible {
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(232, 134, 90, 0.06);
 }
 
+.status-box {
+  margin-top: 16px;
+  border: 1px solid rgba(34, 211, 197, 0.38);
+  border-radius: 10px;
+  background: rgba(34, 211, 197, 0.08);
+  color: #bdf9f3;
+  padding: 11px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.home-screen .secondary-action:disabled {
+  border-color: rgba(174, 178, 181, 0.28);
+  background: linear-gradient(110deg, rgba(54, 57, 59, 0.94), rgba(32, 34, 36, 0.98));
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+  opacity: 1;
+}
+
 .home-screen .action-main {
   display: inline-flex;
   align-items: center;
@@ -1258,6 +1313,27 @@ select:focus-visible {
 .home-screen .secondary-action .action-icon {
   color: #cf754e;
   background: rgba(168, 81, 45, 0.08);
+}
+
+.home-screen .secondary-action:disabled .action-main {
+  color: rgba(210, 212, 213, 0.64);
+}
+
+.home-screen .secondary-action:disabled .action-icon {
+  color: rgba(184, 188, 190, 0.5);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.home-screen .action-status {
+  flex: 0 0 auto;
+  border: 1px solid rgba(193, 197, 199, 0.2);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: rgba(210, 212, 213, 0.66);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .home-screen .action-chevron {
