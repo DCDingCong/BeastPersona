@@ -111,7 +111,7 @@ export function createQueuedGenerationJob({
   });
 }
 
-export function claimNextGenerationJob(leaseSeconds = 300) {
+export function claimNextGenerationJob(leaseSeconds = 900) {
   return withImmediateTransaction((database) => {
     const now = new Date();
     const nowIso = now.toISOString();

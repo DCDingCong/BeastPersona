@@ -22,6 +22,11 @@ export type ScoreSnapshot = {
     missions: string[];
     palettes: string[];
     roles: string[];
+    outfitHints: string[];
+    itemHints: string[];
+    sceneHints: string[];
+    poseHints: string[];
+    motifHints: string[];
     mustKeep: string[];
     avoid: string[];
     promptHints: string[];
@@ -36,6 +41,11 @@ export function scoreAnswers(answers: Answer[] = []): ScoreSnapshot {
     missions: [],
     palettes: [],
     roles: [],
+    outfitHints: [],
+    itemHints: [],
+    sceneHints: [],
+    poseHints: [],
+    motifHints: [],
     mustKeep: [],
     avoid: [],
     promptHints: [],
@@ -52,6 +62,11 @@ export function scoreAnswers(answers: Answer[] = []): ScoreSnapshot {
     if (option.effects?.mission) selectedEffects.missions.push(option.effects.mission);
     if (option.effects?.palette) selectedEffects.palettes.push(option.effects.palette);
     if (option.effects?.role) selectedEffects.roles.push(option.effects.role);
+    selectedEffects.outfitHints.push(...(option.effects?.outfitHints || []));
+    selectedEffects.itemHints.push(...(option.effects?.itemHints || []));
+    selectedEffects.sceneHints.push(...(option.effects?.sceneHints || []));
+    selectedEffects.poseHints.push(...(option.effects?.poseHints || []));
+    selectedEffects.motifHints.push(...(option.effects?.motifHints || []));
     selectedEffects.mustKeep.push(...(option.effects?.mustKeep || []));
     selectedEffects.avoid.push(...(option.effects?.avoid || []));
     selectedEffects.promptHints.push(...(option.effects?.promptHints || []));
@@ -95,16 +110,19 @@ export function rankSpecies(tags: Record<string, number>): SpeciesCandidate[] {
   return speciesKeys
     .map((key) => {
       const direct = tags[key] || 0;
-      const trait = Object.entries(speciesTraitWeights[key] || {}).reduce(
+      const weights = Object.entries(speciesTraitWeights[key] || {});
+      const traitTotal = weights.reduce(
         (total, [tag, weight]) => total + (tags[tag] || 0) * weight,
         0,
       );
-      const roleFactor = key === "mech" ? 0.55 : 1;
+      const weightTotal = weights.reduce((total, [, weight]) => total + weight, 0);
+      const trait = weightTotal > 0 ? traitTotal / Math.sqrt(weightTotal) : 0;
+      const roleFactor = key === "mech" ? 0.3 : 1;
 
       return {
         key,
         species: speciesByKey[key],
-        score: roundScore((direct + trait) * roleFactor),
+        score: roundScore((direct * 1.5 + trait) * roleFactor),
       };
     })
     .sort((a, b) => b.score - a.score);
@@ -147,6 +165,11 @@ function uniqueEffects(effects: ScoreSnapshot["selectedEffects"]) {
     missions: Array.from(new Set(effects.missions)),
     palettes: Array.from(new Set(effects.palettes)),
     roles: Array.from(new Set(effects.roles)),
+    outfitHints: Array.from(new Set(effects.outfitHints)),
+    itemHints: Array.from(new Set(effects.itemHints)),
+    sceneHints: Array.from(new Set(effects.sceneHints)),
+    poseHints: Array.from(new Set(effects.poseHints)),
+    motifHints: Array.from(new Set(effects.motifHints)),
     mustKeep: Array.from(new Set(effects.mustKeep)),
     avoid: Array.from(new Set(effects.avoid)),
     promptHints: Array.from(new Set(effects.promptHints)),

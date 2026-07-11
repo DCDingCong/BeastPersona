@@ -25,7 +25,9 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "生成任务不存在或已过期。" }, { status: 404 });
     }
 
-    kickGenerationWorker();
+    if (job.status === "queued" || job.status === "running") {
+      kickGenerationWorker();
+    }
 
     const result =
       job.status === "succeeded" && job.result_id

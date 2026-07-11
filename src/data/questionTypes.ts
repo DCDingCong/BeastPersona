@@ -19,6 +19,11 @@ export type QuestionOption = {
     mission?: string;
     palette?: string;
     role?: string;
+    outfitHints?: string[];
+    itemHints?: string[];
+    sceneHints?: string[];
+    poseHints?: string[];
+    motifHints?: string[];
     mustKeep?: string[];
     avoid?: string[];
     promptHints?: string[];

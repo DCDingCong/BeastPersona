@@ -3,10 +3,37 @@ import { quickQuestions } from "@/data/quickQuestions";
 import { scoreTagDefinitions } from "@/data/scoreTags";
 import { speciesByKey, speciesTraitWeights } from "@/data/species";
 import { scoreAnswers } from "@/lib/scoring";
+import { inferCharacterBlueprint } from "@/lib/fursona";
 import { describe, expect, it } from "vitest";
 import { validateQuestionBank, validateScoringData } from "./questionBankValidation";
 
 describe("question bank validation", () => {
+  it("keeps final quick outcomes distributed across species, worlds, and roles", () => {
+    let seed = 20260710;
+    const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const sampleSize = 20000;
+    const counts = {
+      species: new Map<string, number>(),
+      world: new Map<string, number>(),
+      role: new Map<string, number>(),
+    };
+
+    for (let index = 0; index < sampleSize; index += 1) {
+      const answers = quickQuestions.map((question) => {
+        const option = question.options[Math.floor(random() * question.options.length)];
+        return { questionId: question.id, optionId: option.id, branch: question.branch };
+      });
+      const blueprint = inferCharacterBlueprint({ mode: "quick", lineageMode: "ai", answers });
+      counts.species.set(blueprint.primarySpecies, (counts.species.get(blueprint.primarySpecies) || 0) + 1);
+      counts.world.set(blueprint.worldStyle, (counts.world.get(blueprint.worldStyle) || 0) + 1);
+      counts.role.set(blueprint.role, (counts.role.get(blueprint.role) || 0) + 1);
+    }
+
+    expect(Math.max(...counts.species.values()) / sampleSize).toBeLessThanOrEqual(0.3);
+    expect(Math.max(...counts.world.values()) / sampleSize).toBeLessThanOrEqual(0.36);
+    expect(Math.max(...counts.role.values()) / sampleSize).toBeLessThanOrEqual(0.28);
+    expect(counts.species.size).toBe(Object.keys(speciesByKey).length);
+  });
   it("keeps every question score attached to a registered tag", () => {
     const issues = validateQuestionBank([...quickQuestions, ...deepQuestionBank]);
 

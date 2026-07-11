@@ -51,7 +51,7 @@ describe("generate route", () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
     expect(payload.characterSpec).toBeUndefined();
     expect(payload.completeSceneImage).toBeUndefined();
     expect(payload.referenceSheetImage).toBeUndefined();
@@ -77,6 +77,8 @@ describe("generate route", () => {
 
   it("uses only strict structured-output object schemas", () => {
     expect(characterSpecSchema).toBeDefined();
+    expect(characterSpecSchema.required).toContain("gender");
+    expect(characterSpecSchema.properties.gender).toEqual({ type: "string", enum: ["male"] });
     expect(findDynamicObjectSchemas(characterSpecSchema)).toEqual([]);
   });
 
@@ -107,14 +109,29 @@ describe("generate route", () => {
 
   it("guides reference sheets toward structured character boards", () => {
     const generationSource = readFileSync(
+      new URL("../../../lib/fursona.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(generationSource).toContain("竖版 A4 人物设定图");
+    expect(generationSource).toContain("右侧九宫格头像表情");
+    expect(generationSource).toContain("必须全部使用简体中文");
+    expect(generationSource).toContain("禁止出现英文");
+    expect(generationSource).toContain("角色背景、身份、生活区域、世界观与经历");
+  });
+
+  it("generates the character sheet after the hero image using it as identity reference", () => {
+    const generationSource = readFileSync(
       new URL("../../../lib/serverGeneration.ts", import.meta.url),
       "utf8",
     );
 
-    expect(generationSource).toContain("竖版 A4 角色设定板");
-    expect(generationSource).toContain("右侧九宫格表情");
-    expect(generationSource).toContain("必须全部使用简体中文");
-    expect(generationSource).toContain("禁止出现英文");
-    expect(generationSource).toContain("角色背景、身份、生活区域、世界观和经历");
+    const heroGeneration = generationSource.indexOf("const completeSceneImage = await");
+    const sheetGeneration = generationSource.indexOf("const referenceSheetImage = completeSceneImage");
+    expect(heroGeneration).toBeGreaterThan(-1);
+    expect(sheetGeneration).toBeGreaterThan(heroGeneration);
+    expect(generationSource).toContain("client.images.edit");
+    expect(generationSource).toContain('input_fidelity: "high"');
+    expect(generationSource).toContain("不要重新设计角色");
   });
 });

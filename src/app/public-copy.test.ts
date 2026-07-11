@@ -80,4 +80,24 @@ describe("public-facing copy", () => {
     expect(pageCopy).not.toContain("仅当前用户可见");
     expect(pageCopy).not.toContain("仅用户可见");
   });
+
+  it("keeps scoring and generation prompts out of the review screen", () => {
+    const pageCopy = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+
+    expect(pageCopy).not.toContain("物种排序");
+    expect(pageCopy).not.toContain("标签内容");
+    expect(pageCopy).not.toContain("具体提示词");
+    expect(pageCopy).not.toContain("高级：编辑图片提示词");
+    expect(pageCopy).toContain("调整角色设定");
+    expect(pageCopy).toContain('<Stat label="性别" value="男性" />');
+  });
+
+  it("exposes result sharing, realistic wait guidance, and in-app browser history", () => {
+    const pageCopy = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+
+    expect(pageCopy).toContain("分享推演结果");
+    expect(pageCopy).toContain("预计需要 3–5 分钟");
+    expect(pageCopy).toContain('window.addEventListener("popstate"');
+    expect(pageCopy).toContain("URL.createObjectURL");
+  });
 });
